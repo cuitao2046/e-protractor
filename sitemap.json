@@ -1,0 +1,9 @@
+{
+  "desc": "关于本站点的索引规则，详见微信文档 https://developers.weixin.qq.com/miniprogram/dev/reference/configuration/sitemap.html",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

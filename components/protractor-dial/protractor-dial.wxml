@@ -1,0 +1,4 @@
+<!-- components/protractor-dial/protractor-dial.wxml -->
+<view class="dial-wrap">
+  <canvas type="2d" id="dialCanvas" class="dial-canvas"></canvas>
+</view>

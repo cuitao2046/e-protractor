@@ -1,0 +1,8 @@
+{
+  "usingComponents": {
+    "protractor-dial": "/components/protractor-dial/protractor-dial"
+  },
+  "navigationBarTitleText": "电子量角器",
+  "enableShareAppMessage": true,
+  "enableShareTimeline": true
+}

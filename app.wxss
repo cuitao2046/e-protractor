@@ -1,0 +1,43 @@
+/* app.wxss — 全局深色主题 */
+page {
+  --bg: #0b0f1a;
+  --panel: #121826;
+  --panel-2: #1a2233;
+  --accent: #38bdf8;
+  --accent-amber: #f59e0b;
+  --snap: #4ade80;
+  --text: #e6edf6;
+  --text-dim: #8a93a6;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+view, text {
+  box-sizing: border-box;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+  border: none;
+}
+.btn::after { border: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: #04121f;
+}
+
+.btn-ghost {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.btn:active { opacity: 0.82; transform: scale(0.985); }

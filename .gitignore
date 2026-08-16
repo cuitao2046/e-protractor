@@ -1,0 +1,10 @@
+# WorkBuddy local agent data (memory, logs) — not part of the app
+.workbuddy/
+
+# OS junk
+.DS_Store
+Thumbs.db
+*.log
+
+# WeChat devtools private config (regenerated locally)
+project.private.config.json
