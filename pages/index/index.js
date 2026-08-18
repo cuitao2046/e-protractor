@@ -10,6 +10,7 @@ Page({
     baselineAngle: 0,        // 初始 0 = 正北（与指南针正北向重叠）
     isSnap: false,
     baselineSet: false,
+    isLevel: false,         // 水平仪：手机接近水平面时为 true
     unit: 'deg',
     recordCount: 0,
     cardinalText: '北',
@@ -39,13 +40,16 @@ Page({
         if (this._needAutoLock && typeof s.alpha === 'number') {
           this._doAutoLock();
         }
+        // 水平仪：俯仰(beta) 与 横滚(gamma) 都接近 0
+        const isLevel = Math.abs(s.beta || 0) < 2 && Math.abs(s.gamma || 0) < 2;
         this.setData({
           displayValue: s.displayValue,
           phoneHeading: s.alpha || 0,
           isSnap: s.isSnapped,
           baselineSet: this.data.baselineSet,
+          isLevel,
           cardinalText: this._angleToCardinal(s.angle),
-          statusText: this._buildStatus(s.isSnapped, this.data.baselineSet),
+          statusText: this._buildStatus(s.isSnapped, this.data.baselineSet, isLevel),
         });
       },
     });
@@ -204,7 +208,8 @@ Page({
     return labels[idx];
   },
 
-  _buildStatus(isSnap, baselineSet) {
+  _buildStatus(isSnap, baselineSet, isLevel) {
+    if (isLevel) return '水平 · 基准已锁定';
     if (isSnap) return '已归零';
     if (baselineSet) return '相对角度 · 基准已锁定';
     return '正在校准基准…';

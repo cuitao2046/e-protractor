@@ -38,6 +38,8 @@ class ProtractorEngine {
     this.smoothAngle = 0;     // 滤波后角度（相对基准）
     this.lastRawAngle = 0;    // 上一帧原始角（用于角速度估算）
     this.velocity = 0;        // 角速度（用于自适应滤波）
+    this._lastBeta = 0;       // 最近一帧的俯仰角（X 轴），供水平仪判定
+    this._lastGamma = 0;      // 最近一帧的横滚角（Y 轴），供水平仪判定
     this.unit = 'deg';
     this.isSnapped = false;
     this.snapLatched = false; // 磁吸防抖锁存
@@ -124,6 +126,8 @@ class ProtractorEngine {
     const gamma = typeof res.gamma === 'number' ? res.gamma : 0;
 
     this.rawAngle = alpha;
+    this._lastBeta = beta;
+    this._lastGamma = gamma;
 
     // (1) 相对转角
     let delta = alpha - this.refAngle;
@@ -168,6 +172,8 @@ class ProtractorEngine {
       baselineSet: this.baselineSet,
       isTiltWarning,
       alpha: this.rawAngle,
+      beta: this._lastBeta,
+      gamma: this._lastGamma,
     });
   }
 
