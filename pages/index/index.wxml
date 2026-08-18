@@ -3,11 +3,12 @@
   <!-- 顶部状态（仅展示记录数，不拦截手势） -->
   <view class="status-bar">
     <text class="status-text">记录 {{recordCount}}/1000</text>
+    <text class="baseline-pill {{baselineSet ? 'locked' : ''}}">{{baselineSet ? '基准 已锁定' : '基准 未设'}}</text>
   </view>
 
   <!-- 指南针式罗盘盘面 -->
   <view class="dial-area">
-    <protractor-dial angle="{{smoothAngle}}" isSnap="{{isSnap}}" holdLatched="{{holdLatched}}" />
+    <protractor-dial angle="{{smoothAngle}}" isSnap="{{isSnap}}" holdLatched="{{holdLatched}}" baselineSet="{{baselineSet}}" />
   </view>
 
   <!-- 底部大读数 -->
@@ -19,7 +20,7 @@
     <text class="readout-subtitle {{isTiltWarning ? 'warn' : ''}}">{{statusText}}</text>
 
     <view class="gesture-hint">
-      <text>单击屏幕 开始/停止 · 长按 设基准 · 双击 记录 · 点击读数 切换单位</text>
+      <text>单击屏幕 开始/停止 · 长按 锁定基准 · 双击 记录 · 点击读数 切换单位</text>
     </view>
   </view>
 </view>

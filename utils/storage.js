@@ -3,6 +3,7 @@
  * 海量测量记录：本地离线存储 + 1000 条 FIFO 自动循环清理 + CSV 导出
  */
 const STORAGE_KEY = 'measure_records';
+const BASELINE_KEY = 'baseline_ref';
 const MAX_RECORDS = 1000;
 
 function getRecords() {
@@ -73,6 +74,23 @@ function getCount() {
 }
 
 /**
+ * 基准线（0° 参考）持久化：存的是设备原始姿态角 alpha（0~360，相对磁北）
+ * 这样重开小程序后基准仍锁定在当初的世界方向上。
+ */
+function getBaseline() {
+  const v = wx.getStorageSync(BASELINE_KEY);
+  return typeof v === 'number' ? v : null;
+}
+
+function setBaseline(refAngle) {
+  wx.setStorageSync(BASELINE_KEY, refAngle);
+}
+
+function clearBaseline() {
+  wx.removeStorageSync(BASELINE_KEY);
+}
+
+/**
  * 生成 CSV 文本（带 BOM 头，Excel 打开中文不乱码）
  */
 function toCSV(records) {
@@ -119,6 +137,9 @@ module.exports = {
   removeRecord,
   clearAll,
   getCount,
+  getBaseline,
+  setBaseline,
+  clearBaseline,
   toCSV,
   exportCSV,
   formatTime,

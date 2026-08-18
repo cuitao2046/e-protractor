@@ -9,6 +9,7 @@ Page({
     smoothAngle: 0,
     isSnap: false,
     holdLatched: false,
+    baselineSet: false,
     isTiltWarning: false,
     unit: 'deg',
     recordCount: 0,
@@ -36,9 +37,10 @@ Page({
           smoothAngle: s.angle,
           isSnap: s.isSnapped,
           holdLatched: s.holdLatched,
+          baselineSet: s.baselineSet,
           isTiltWarning: s.isTiltWarning,
           cardinalText: this._angleToCardinal(s.angle),
-          statusText: this._buildStatus(s.isTiltWarning, s.holdLatched),
+          statusText: this._buildStatus(s.isTiltWarning, s.holdLatched, s.baselineSet),
         });
       },
     });
@@ -46,6 +48,13 @@ Page({
     const unit = app.globalData.unit || 'deg';
     this.engine.setUnit(unit);
     this.setData({ unit });
+
+    // 恢复上次锁定的基准线（若用户此前设过）
+    const savedBaseline = storage.getBaseline();
+    if (typeof savedBaseline === 'number') {
+      this.engine.restoreBaseline(savedBaseline);
+      this.setData({ baselineSet: true });
+    }
   },
 
   onShow() {
@@ -82,16 +91,22 @@ Page({
     }, 300);
   },
 
-  // —— 手势：长按屏幕 设为基准 ——
-  onPageLongPress() {
+  // —— 手势：长按屏幕 锁定基准（设为 0° 参考）——
+  async onPageLongPress() {
+    // 未开始测量时自动开启并等待首帧姿态，确保锁到的是"当前"方向而非 0
     if (!this.data.started) {
-      wx.showToast({ title: '请先开始测量', icon: 'none' });
-      return;
+      try {
+        await this.toggleStart();
+        await new Promise((r) => setTimeout(r, 150));
+      } catch (e) {
+        return;
+      }
     }
     this.engine.setReference();
     this.engine.releaseHold();
-    this.setData({ holdLatched: false });
-    wx.showToast({ title: '已设为基准', icon: 'success' });
+    storage.setBaseline(this.engine.refAngle);
+    this.setData({ holdLatched: false, baselineSet: true });
+    wx.showToast({ title: '已锁定基准', icon: 'success' });
   },
 
   // —— 手势：点击读数 切换度/弧度（双击此处也会记录）——
@@ -189,10 +204,10 @@ Page({
     return labels[idx];
   },
 
-  _buildStatus(isTiltWarning, holdLatched) {
+  _buildStatus(isTiltWarning, holdLatched, baselineSet) {
     if (isTiltWarning) return '请尽量贴紧测量面以保证精度';
     if (holdLatched) return '已自动锁定';
-    if (this.data.started) return '相对角度';
+    if (this.data.started) return baselineSet ? '相对角度 · 基准已锁定' : '相对角度';
     return '已暂停 · 单击屏幕继续';
   },
 

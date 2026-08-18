@@ -41,6 +41,7 @@ class ProtractorEngine {
     this.unit = 'deg';
     this.isSnapped = false;
     this.snapLatched = false; // 磁吸防抖锁存
+    this.baselineSet = false; // 是否已锁定基准线（0° 参考）
     this.lastVibrateStep = 0;
     this.lastVibrateTime = 0;
     this.holdTimer = null;
@@ -88,12 +89,20 @@ class ProtractorEngine {
     this.smoothAngle = 0;
     this.isSnapped = false;
     this.snapLatched = false;
+    this.baselineSet = true;
+    this._emit(this.smoothAngle, false); // 立即同步 baselineSet 到 UI
     // 重震 + 闭锁音，给明确的"已归零"反馈
     wx.vibrateShort({ type: 'heavy' });
     if (this.audio && this.audio.snap) {
       this.audio.snap.seek(0);
       this.audio.snap.play();
     }
+  }
+
+  // —— 恢复持久化的基准线（小程序重开后调用）——
+  restoreBaseline(refAngle) {
+    this.refAngle = refAngle;
+    this.baselineSet = true;
   }
 
   setUnit(unit) {
@@ -155,6 +164,7 @@ class ProtractorEngine {
       displayValue,
       isSnapped: this.isSnapped,
       holdLatched: this.holdLatched,
+      baselineSet: this.baselineSet,
       isTiltWarning,
       alpha: this.rawAngle,
     });

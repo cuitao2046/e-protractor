@@ -11,7 +11,7 @@
 
 .status-bar {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   height: 48rpx;
 }
@@ -19,6 +19,18 @@
   font-size: 24rpx;
   color: #6b7280;
   font-variant-numeric: tabular-nums;
+}
+.baseline-pill {
+  font-size: 22rpx;
+  color: #6b7280;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid #2c2c2e;
+}
+.baseline-pill.locked {
+  color: #f59e0b;
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .dial-area {

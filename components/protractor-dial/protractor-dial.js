@@ -8,6 +8,8 @@ Component({
     isSnap: { type: Boolean, value: false, observer() { this._redraw(); } },
     // 是否 Auto-Hold 锁定（可扩展视觉，当前不改变盘面）
     holdLatched: { type: Boolean, value: false, observer() { this._redraw(); } },
+    // 是否已锁定基准线（顶部标记变琥珀色 + 绘制基线）
+    baselineSet: { type: Boolean, value: false, observer() { this._redraw(); } },
   },
 
   data: {},
@@ -59,11 +61,11 @@ Component({
 
     _redraw() {
       if (!this._inited || !this.ctx) return;
-      const { angle, isSnap, holdLatched } = this.properties;
-      this._draw(angle || 0, !!isSnap, !!holdLatched);
+      const { angle, isSnap, holdLatched, baselineSet } = this.properties;
+      this._draw(angle || 0, !!isSnap, !!holdLatched, !!baselineSet);
     },
 
-    _draw(angle, isSnap, holdLatched) {
+    _draw(angle, isSnap, holdLatched, baselineSet) {
       const ctx = this.ctx;
       const W = this.W, H = this.H;
       const cx = W / 2, cy = H / 2;
@@ -147,8 +149,25 @@ Component({
       ctx.strokeStyle = '#3a3a3c';
       ctx.stroke();
 
-      // —— 顶部固定指向标（iOS 指南针红三角）——
-      const markerColor = isSnap ? '#4ade80' : '#ef4444';
+      // —— 顶部固定基准标记（不随盘面旋转）——
+      // 配色优先级：磁吸归零(绿) > 已锁定基线(琥珀) > 未锁定(暗灰)
+      let markerColor = '#3a3a3c';
+      if (isSnap) markerColor = '#4ade80';
+      else if (baselineSet) markerColor = '#f59e0b';
+
+      // 已锁定基线：从中心到顶的细参考线（固定不转），清晰标示 0° 方向
+      if (baselineSet && !isSnap) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx, cy - R + 10);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 顶部三角指向标
       ctx.beginPath();
       ctx.moveTo(cx, cy - R + 4);
       ctx.lineTo(cx - 10, cy - R + 30);
@@ -157,7 +176,7 @@ Component({
       ctx.fillStyle = markerColor;
       ctx.fill();
 
-      // 顶部竖线（与红三角同宽，强调指向）
+      // 顶部竖线（与三角同宽，强调指向）
       ctx.beginPath();
       ctx.moveTo(cx, cy - R + 30);
       ctx.lineTo(cx, cy - R + 48);
@@ -165,7 +184,15 @@ Component({
       ctx.strokeStyle = markerColor;
       ctx.stroke();
 
-      // 锁定状态小点
+      // 磁吸/锁定 时的中心小圆点（锁定点）
+      if (baselineSet || isSnap) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = markerColor;
+        ctx.fill();
+      }
+
+      // 锁定状态小点（Auto-Hold）
       if (holdLatched) {
         ctx.beginPath();
         ctx.arc(cx, cy, R * 0.12, 0, Math.PI * 2);
