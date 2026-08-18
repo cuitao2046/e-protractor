@@ -2,6 +2,8 @@
   "usingComponents": {
     "protractor-dial": "/components/protractor-dial/protractor-dial"
   },
+  "navigationStyle": "custom",
+  "disableScroll": true,
   "navigationBarTitleText": "电子量角器",
   "enableShareAppMessage": true,
   "enableShareTimeline": true

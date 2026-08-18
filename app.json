@@ -11,22 +11,6 @@
     "backgroundColorTop": "#0b0f1a",
     "backgroundColorBottom": "#0b0f1a"
   },
-  "tabBar": {
-    "color": "#8a93a6",
-    "selectedColor": "#38bdf8",
-    "backgroundColor": "#0b0f1a",
-    "borderStyle": "black",
-    "list": [
-      {
-        "pagePath": "pages/index/index",
-        "text": "测量"
-      },
-      {
-        "pagePath": "pages/history/history",
-        "text": "历史"
-      }
-    ]
-  },
   "sitemapLocation": "sitemap.json",
   "__usePrivacyCheck__": true,
   "permission": {

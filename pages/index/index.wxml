@@ -1,26 +1,32 @@
 <!-- pages/index/index.wxml -->
-<view class="page" bindtap="onPageTap" bindlongpress="onPageLongPress">
-  <!-- 顶部状态（仅展示记录数，不拦截手势） -->
-  <view class="status-bar">
-    <text class="status-text">记录 {{recordCount}}/1000</text>
-    <text class="baseline-pill {{baselineSet ? 'locked' : ''}}">{{baselineSet ? '基准 已锁定' : '基准 未设'}}</text>
+<view class="page" bindlongpress="onPageLongPress" bindtap="onPageTap">
+
+  <!-- 顶部：左 汉堡菜单(历史) · 右 基准胶囊 + 统计 -->
+  <view class="top-bar">
+    <view class="hamburger" bindtap="goHistory" hover-class="hover" hover-stay-time="80">
+      <view class="bar"></view>
+      <view class="bar"></view>
+      <view class="bar"></view>
+    </view>
+
+    <view class="top-right">
+      <view class="baseline-pill {{baselineSet ? 'locked' : ''}}">{{baselineSet ? '基准 已锁定' : '基准 未设'}}</view>
+      <text class="stats-text">记录 {{recordCount}}/1000</text>
+    </view>
   </view>
 
-  <!-- 指南针式罗盘盘面 -->
+  <!-- 指南针式罗盘盘面（刻度固定、指南针固定、刻度指针随手机旋转） -->
   <view class="dial-area">
     <protractor-dial angle="{{smoothAngle}}" isSnap="{{isSnap}}" holdLatched="{{holdLatched}}" baselineSet="{{baselineSet}}" />
   </view>
 
-  <!-- 底部大读数 -->
+  <!-- 底部读数 -->
   <view class="bottom">
     <view class="readout" catchtap="onReadoutTap">
       <text class="readout-value {{isSnap ? 'snap' : (holdLatched ? 'hold' : '')}}">{{displayValue}}</text>
       <text class="readout-cardinal">{{cardinalText}}</text>
     </view>
     <text class="readout-subtitle {{isTiltWarning ? 'warn' : ''}}">{{statusText}}</text>
-
-    <view class="gesture-hint">
-      <text>单击屏幕 开始/停止 · 长按 锁定基准 · 双击 记录 · 点击读数 切换单位</text>
-    </view>
+    <text class="gesture-hint">长按 锁定基准 · 双击 记录 · 点击读数 切换单位</text>
   </view>
 </view>
