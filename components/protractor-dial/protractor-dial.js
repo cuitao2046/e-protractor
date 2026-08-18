@@ -17,6 +17,10 @@ Component({
       this._inited = false;
       this._initCanvas();
     },
+    ready() {
+      // 布局完成后再取一次节点尺寸，作为兜底
+      this._initCanvas();
+    },
     detached() {
       this.canvas = null;
       this.ctx = null;
@@ -31,16 +35,23 @@ Component({
         .fields({ node: true, size: true })
         .exec((res) => {
           if (!res || !res[0] || !res[0].node) return;
+          const w = res[0].width || 0;
+          const h = res[0].height || 0;
+          if (w <= 0 || h <= 0) {
+            // 布局尚未完成，稍后重试，避免永久不绘制
+            setTimeout(() => this._initCanvas(), 60);
+            return;
+          }
           const canvas = res[0].node;
           const ctx = canvas.getContext('2d');
           const dpr = (wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : wx.getSystemInfoSync().pixelRatio) || 2;
-          canvas.width = res[0].width * dpr;
-          canvas.height = res[0].height * dpr;
+          canvas.width = w * dpr;
+          canvas.height = h * dpr;
           ctx.scale(dpr, dpr);
           this.canvas = canvas;
           this.ctx = ctx;
-          this.W = res[0].width;
-          this.H = res[0].height;
+          this.W = w;
+          this.H = h;
           this._inited = true;
           this._redraw();
         });
@@ -57,6 +68,7 @@ Component({
       const W = this.W, H = this.H;
       const cx = W / 2, cy = H / 2;
       const R = Math.min(W, H) / 2 - 10;
+      if (R <= 0) return; // 尺寸未就绪时直接跳过，避免负半径抛异常
       const dialRad = (-angle * Math.PI) / 180;
 
       ctx.clearRect(0, 0, W, H);
