@@ -72,9 +72,25 @@ Page({
       this.setData({ started: true });
       wx.showToast({ title: '转动手机开始测量', icon: 'none' });
     } catch (e) {
+      const msg = (e && e.errMsg) || '';
+      let title = '无法启动传感器';
+      let tip =
+        '请到 iPhone「设置 → 隐私与安全性 → 运动与健身 → 微信」开启权限，\n' +
+        '然后务必上滑彻底关闭微信（杀进程）再重开，仅关小程序无效。';
+      if (msg.indexOf('privacy') >= 0) {
+        title = '需先同意隐私协议';
+        tip =
+          '弹出的隐私协议请点「同意」；若反复弹出，请到 mp.weixin.qq.com 后台\n' +
+          '「设置 → 服务类目/用户隐私保护指引」发布隐私指引，再重新进入小程序。';
+      } else if (msg.indexOf('auth') >= 0 || msg.indexOf('deny') >= 0) {
+        title = '运动权限被拒绝';
+        tip =
+          'iOS 已缓存「拒绝」记录。请去「设置 → 隐私与安全性 → 运动与健身 → 微信」开启，\n' +
+          '并上滑彻底关闭微信重开（running 进程不会即时读取新授权）。';
+      }
       wx.showModal({
-        title: '无法启动传感器',
-        content: '请在 iPhone 的"设置 → 微信 → 运动与健身"中开启权限后重试。',
+        title,
+        content: tip + '\n\n(err: ' + msg + ')',
         showCancel: false,
       });
     }
