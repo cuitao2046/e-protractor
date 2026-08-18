@@ -113,7 +113,7 @@ Component({
 
       // —— 方位字（北/东/南/西，固定不转）——
       const cardinals = [
-        { d: 0, label: '北', color: '#ef4444' },
+        { d: 0, label: '北', color: '#ff3b30' },
         { d: 90, label: '东', color: '#ffffff' },
         { d: 180, label: '南', color: '#ffffff' },
         { d: 270, label: '西', color: '#ffffff' },
@@ -135,27 +135,27 @@ Component({
       ctx.translate(cx, cy);
       ctx.rotate(needleRad);
       const needleLen = R - 8;
-      // 红头（指向被测方向）
+      // 红头（细长箭头，指向被测方向）
       ctx.beginPath();
       ctx.moveTo(0, -needleLen);
-      ctx.lineTo(-8, -14);
-      ctx.lineTo(8, -14);
+      ctx.lineTo(-6, -12);
+      ctx.lineTo(6, -12);
       ctx.closePath();
-      ctx.fillStyle = '#ff453a';
+      ctx.fillStyle = '#ff3b30';
       ctx.fill();
-      // 杆
+      // 杆（细 2px）
       ctx.beginPath();
-      ctx.moveTo(0, -14);
-      ctx.lineTo(0, needleLen * 0.42);
-      ctx.lineWidth = 3;
+      ctx.moveTo(0, -12);
+      ctx.lineTo(0, needleLen * 0.45);
+      ctx.lineWidth = 2;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#ff453a';
+      ctx.strokeStyle = '#ff3b30';
       ctx.stroke();
-      // 尾（浅色配重）
+      // 尾（浅色细配重）
       ctx.beginPath();
-      ctx.moveTo(0, needleLen * 0.42);
-      ctx.lineTo(-6, needleLen * 0.42 + 18);
-      ctx.lineTo(6, needleLen * 0.42 + 18);
+      ctx.moveTo(0, needleLen * 0.45);
+      ctx.lineTo(-4, needleLen * 0.45 + 12);
+      ctx.lineTo(4, needleLen * 0.45 + 12);
       ctx.closePath();
       ctx.fillStyle = '#e5e5ea';
       ctx.fill();
@@ -175,38 +175,40 @@ Component({
       ctx.strokeStyle = '#3a3a3c';
       ctx.stroke();
 
-      // —— 顶部固定基准标记（不随盘面旋转）——
-      // 配色优先级：磁吸归零(绿) > 已锁定基线(琥珀) > 未锁定(暗灰)
-      let markerColor = '#3a3a3c';
+      // —— 顶部固定基准标记（仿 iOS 指南针：窄而尖锐的细三角 + 细杆）——
+      // 配色优先级：磁吸归零(绿) > 已锁定基线(琥珀) > 默认(红)
+      let markerColor = '#ff3b30';
       if (isSnap) markerColor = '#4ade80';
       else if (baselineSet) markerColor = '#f59e0b';
 
       // 已锁定基线：从中心到顶的细参考线（固定不转），清晰标示 0° 方向
       if (baselineSet && !isSnap) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.55)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
-        ctx.lineTo(cx, cy - R + 10);
+        ctx.lineTo(cx, cy - R + 22);
         ctx.stroke();
         ctx.restore();
       }
 
-      // 顶部三角指向标
+      // 顶部细三角（尖头贴外沿，宽 10、高 14，比旧版更窄更利落）
+      const tipY = cy - R + 5;
       ctx.beginPath();
-      ctx.moveTo(cx, cy - R + 4);
-      ctx.lineTo(cx - 10, cy - R + 30);
-      ctx.lineTo(cx + 10, cy - R + 30);
+      ctx.moveTo(cx, tipY);
+      ctx.lineTo(cx - 5, tipY + 14);
+      ctx.lineTo(cx + 5, tipY + 14);
       ctx.closePath();
       ctx.fillStyle = markerColor;
       ctx.fill();
 
-      // 顶部竖线（与三角同宽，强调指向）
+      // 细杆（1.5px，向下延伸 16px）
       ctx.beginPath();
-      ctx.moveTo(cx, cy - R + 30);
-      ctx.lineTo(cx, cy - R + 48);
-      ctx.lineWidth = 2;
+      ctx.moveTo(cx, tipY + 14);
+      ctx.lineTo(cx, tipY + 30);
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
       ctx.strokeStyle = markerColor;
       ctx.stroke();
 
