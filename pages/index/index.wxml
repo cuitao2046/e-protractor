@@ -1,31 +1,89 @@
-<!-- pages/index/index.wxml -->
+<!-- pages/index/index.wxml — iOS 指南针 -->
 <view class="page">
+  <swiper
+    class="swiper"
+    current="{{currentPage}}"
+    bindchange="onSwiperChange"
+    duration="300"
+    easing-function="easeOut"
+  >
+    <!-- ============ 第1页：指南针 ============ -->
+    <swiper-item>
+      <view class="page-content compass-page">
+        <!-- 罗盘 -->
+        <view class="dial-area">
+          <compass-dial
+            heading="{{heading}}"
+            stableHeading="{{stableHeading}}"
+            beta="{{beta}}"
+            gamma="{{gamma}}"
+            bindrefchange="onRefChange"
+            bindmeasure="onMeasure"
+          />
+        </view>
 
-  <!-- 顶部：左 汉堡菜单(历史) · 右 基准胶囊 + 统计 -->
-  <view class="top-bar">
-    <view class="hamburger" bindtap="goHistory" hover-class="hover" hover-stay-time="80">
-      <view class="bar"></view>
-      <view class="bar"></view>
-      <view class="bar"></view>
-    </view>
+        <!-- 方位大读数 -->
+        <view class="heading-readout">
+          <text class="heading-value">{{displayHeading}}°</text>
+          <text class="heading-cardinal">{{cardinalName}}</text>
+        </view>
 
-    <view class="top-right">
-      <view class="baseline-pill {{baselineSet ? 'locked' : ''}}">{{baselineSet ? '基准 已锁定' : '基准 未设'}}</view>
-      <text class="stats-text">记录 {{recordCount}}/1000</text>
-    </view>
+        <!-- 指针与基准的相对读数（锁定基准时显示） -->
+        <view wx:if="{{relativeHeading !== null}}" class="relative-readout">
+          <text>{{relativeStr}}</text>
+        </view>
+      </view>
+    </swiper-item>
+
+    <!-- ============ 第2页：水平仪 ============ -->
+    <swiper-item>
+      <view class="page-content level-page">
+        <view class="level-area">
+          <level beta="{{beta}}" gamma="{{gamma}}" />
+        </view>
+
+        <view class="tilt-readout">
+          <text class="tilt-value">{{tiltDegrees}}°</text>
+        </view>
+
+        <view wx:if="{{isLevel}}" class="level-hint">
+          <text>水平</text>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <!-- 页面指示点 -->
+  <view class="page-dots">
+    <view class="dot {{currentPage === 0 ? 'active' : ''}}"></view>
+    <view class="dot {{currentPage === 1 ? 'active' : ''}}"></view>
   </view>
 
-  <!-- 罗盘（单击设基准，双击记录历史） -->
-  <view class="dial-area" catchtap="onDialTap">
-    <protractor-dial phoneHeading="{{phoneHeading}}" baselineAngle="{{baselineAngle}}" beta="{{beta}}" gamma="{{gamma}}" isSnap="{{isSnap}}" baselineSet="{{baselineSet}}" isLevel="{{isLevel}}" />
+  <!-- 右下角：历史记录入口（三道杠） -->
+  <view class="menu-btn" bindtap="openHistory">
+    <view class="menu-line"></view>
+    <view class="menu-line"></view>
+    <view class="menu-line"></view>
   </view>
 
-  <!-- 底部读数（单击切换度/弧度） -->
-  <view class="bottom">
-    <view class="readout" catchtap="onReadoutTap">
-      <text class="readout-value {{isSnap ? 'snap' : ''}}">{{displayValue}}</text>
-      <text class="readout-cardinal">{{cardinalText}}</text>
+  <!-- 历史记录面板 -->
+  <view wx:if="{{showHistory}}" class="history-mask" bindtap="closeHistory">
+    <view class="history-panel" catchtap="noop">
+      <view class="history-header">
+        <text class="history-title">测量历史</text>
+        <text class="history-clear" bindtap="clearHistory">清空</text>
+        <text class="history-close" bindtap="closeHistory">✕</text>
+      </view>
+      <scroll-view scroll-y class="history-list">
+        <view wx:if="{{historyList.length === 0}}" class="history-empty">暂无记录，双击罗盘可记录测量</view>
+        <view wx:for="{{historyList}}" wx:key="id" class="history-item">
+          <view class="history-item-top">
+            <text class="history-time">{{item.timeStr}}</text>
+            <text class="history-delta {{item.delta >= 0 ? 'pos' : 'neg'}}">{{item.deltaStr}}</text>
+          </view>
+          <text class="history-base">基准 {{item.baseStr}}°</text>
+        </view>
+      </scroll-view>
     </view>
-    <text class="readout-subtitle">{{statusText}}</text>
   </view>
 </view>

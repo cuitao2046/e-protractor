@@ -1,240 +1,266 @@
-// pages/index/index.js
-const { ProtractorEngine, normalizeAngle } = require('../../utils/protractor.js');
-const storage = require('../../utils/storage.js');
-const app = getApp();
+// pages/index/index.js — iOS 风格指南针
+const { CompassEngine } = require('../../utils/compass.js');
+
+// 每帧追赶系数：传感器低频(约5Hz) → rAF 插值平滑到 60fps
+const EASE = 0.35;
+const EPS = 0.02;
 
 Page({
   data: {
-    displayValue: '+0.0°',
-    phoneHeading: 0,
-    baselineAngle: 0,        // 初始 0 = 正北（与指南针正北向重叠）
-    isSnap: false,
-    baselineSet: false,
-    isLevel: false,         // 水平仪：手机接近水平面时为 true
-    beta: 0,                // 水平仪：俯仰角（X 轴）
-    gamma: 0,               // 水平仪：横滚角（Y 轴）
-    unit: 'deg',
-    recordCount: 0,
-    cardinalText: '北',
-    statusText: '正在校准基准…',
+    currentPage: 0,
+    heading: 0,
+    displayHeading: 0,
+    stableHeading: 0,        // 高精度稳定读数（静止平均，0.1°）
+    beta: 0,
+    gamma: 0,
+    cardinalName: '北',
+    tiltDegrees: '0',
+    isLevel: false,
+    relativeHeading: null,   // 指针与基准的相对读数（锁定基准时显示）
+    relativeStr: '',         // 相对读数显示字符串（如 +12.5°）
+    showHistory: false,      // 历史记录面板
+    historyList: [],         // 测量历史：[{id, timeStr, base, baseStr, delta, deltaStr}]
   },
 
   onLoad() {
-    // 音频预加载（短促机械音，关掉静音开关以保证声触同步）
-    this.tickAudio = wx.createInnerAudioContext();
-    this.tickAudio.src = '/assets/audio/tick.wav';
-    this.tickAudio.obeyMuteSwitch = false;
+    this._destroyed = false;
+    this._rafOn = false;
+    this._raf = 0;
+    this._prevLevel = false;
+    this._refAngle = null;   // 基准刻度（盘面坐标角度），来自罗盘组件
+    this._cur = { heading: 0, beta: 0, gamma: 0 };
+    this._target = { heading: 0, beta: 0, gamma: 0, cardinalName: '北', isLevel: false };
 
-    this.snapAudio = wx.createInnerAudioContext();
-    this.snapAudio.src = '/assets/audio/snap.wav';
-    this.snapAudio.obeyMuteSwitch = false;
+    // 恢复历史记录（兼容旧版无 baseStr/deltaStr 的数据）
+    const saved = wx.getStorageSync('compass_history');
+    if (Array.isArray(saved) && saved.length) {
+      const cleaned = saved.map((r) => {
+        const baseNum = Math.round((r.base || 0) * 10) / 10;
+        const deltaNum = Math.round((r.delta || 0) * 10) / 10;
+        return {
+          id: r.id,
+          timeStr: r.timeStr,
+          base: baseNum,
+          baseStr: r.baseStr || baseNum.toFixed(1).replace(/\.0$/, ''),
+          delta: deltaNum,
+          deltaStr: r.deltaStr || (deltaNum >= 0 ? '+' : '') + deltaNum.toFixed(1) + '°',
+        };
+      });
+      this.setData({ historyList: cleaned });
+    }
 
-    this._autoLocked = false;     // 本次生命周期内是否已自动锁定
-    this._needAutoLock = true;    // 等待首帧运动数据后自动锁定
-    this.lastDialTapTime = 0;
-    this.lastReadoutTapTime = 0;
-
-    this.engine = new ProtractorEngine({
-      audio: { tick: this.tickAudio, snap: this.snapAudio },
+    this.engine = new CompassEngine({
       onUpdate: (s) => {
         if (this._destroyed) return;
-        // 首帧拿到真实姿态后，自动标记已就绪（基准线默认在正北，基准=0°）
-        if (this._needAutoLock && typeof s.alpha === 'number') {
-          this._doAutoLock();
-        }
-        // 盘面持续旋转，对 phoneHeading 做低通平滑(0.4)防止抖动
-        const raw = s.alpha || 0;
-        const prev = typeof this.data.phoneHeading === 'number' ? this.data.phoneHeading : raw;
-        const diff = (((raw - prev) % 360) + 540) % 360 - 180;
-        const phoneHeading = (((prev + diff * 0.4) % 360) + 360) % 360;
-        // 水平仪：俯仰(beta) 与 横滚(gamma) 都接近 0
-        const isLevel = Math.abs(s.beta || 0) < 2 && Math.abs(s.gamma || 0) < 2;
-        this.setData({
-          displayValue: s.displayValue,
-          phoneHeading,
-          isSnap: s.isSnapped,
-          baselineSet: this.data.baselineSet,
-          isLevel,
-          beta: s.beta || 0,
-          gamma: s.gamma || 0,
-          cardinalText: this._angleToCardinal(s.angle),
-          statusText: this._buildStatus(s.isSnapped, this.data.baselineSet, isLevel),
-        });
+        // 只更新目标值，由 rAF 循环插值渲染
+        this._target.heading = s.heading;
+        this._target.beta = s.beta;
+        this._target.gamma = s.gamma;
+        this._target.cardinalName = s.cardinalName;
+        this._target.isLevel = s.isLevel;
+        this._isStill = !!s.isStill;   // 静止判定（测量用）
+        this.setData({ stableHeading: s.stableHeading });
+        this._startLoop();
       },
     });
-
-    const unit = app.globalData.unit || 'deg';
-    this.engine.setUnit(unit);
-    this.setData({ unit });
   },
 
   onShow() {
-    this.setData({ recordCount: storage.getCount() });
-    // 打开即进入测量模式（返回本页也恢复测量，但已锁定的基准保持不变）
-    if (!this.engine.listening) {
-      this._autoStart();
-    }
+    this._startEngine();
   },
 
   onHide() {
+    this._stopLoop();
     this.engine && this.engine.stop();
-    if (this._lockTimer) {
-      clearTimeout(this._lockTimer);
-      this._lockTimer = null;
-    }
   },
 
   onUnload() {
     this._destroyed = true;
+    this._stopLoop();
     this.engine && this.engine.stop();
-    this.tickAudio && this.tickAudio.destroy();
-    this.snapAudio && this.snapAudio.destroy();
-    if (this._lockTimer) clearTimeout(this._lockTimer);
   },
 
-  // —— 打开即启动测量；首帧自动就绪（基准默认在正北）——
-  _autoStart() {
-    this.engine
-      .start()
-      .then(() => {
-        if (this._needAutoLock && !this._autoLocked) {
-          // 若 1s 内无运动回调，也强制标记就绪，避免卡在"校准中"
-          this._lockTimer = setTimeout(() => {
-            if (this._needAutoLock && !this._autoLocked) this._doAutoLock();
-          }, 1000);
-        }
-      })
-      .catch((e) => {
-        const msg = (e && e.errMsg) || '';
-        let title = '无法启动传感器';
-        let tip =
-          '请到 iPhone「设置 → 隐私与安全性 → 运动与健身 → 微信」开启权限，\n' +
-          '然后务必上滑彻底关闭微信（杀进程）再重开，仅关小程序无效。';
-        if (msg.indexOf('privacy') >= 0) {
-          title = '需先同意隐私协议';
-          tip =
-            '弹出的隐私协议请点「同意」；若反复弹出，请到 mp.weixin.qq.com 后台\n' +
-            '「设置 → 服务类目/用户隐私保护指引」发布隐私指引，再重新进入小程序。';
-        } else if (msg.indexOf('auth') >= 0 || msg.indexOf('deny') >= 0) {
-          title = '运动权限被拒绝';
-          tip =
-            'iOS 已缓存「拒绝」记录。请去「设置 → 隐私与安全性 → 运动与健身 → 微信」开启，\n' +
-            '并上滑彻底关闭微信重开（running 进程不会即时读取新授权）。';
-        }
-        wx.showModal({ title, content: tip + '\n\n(err: ' + msg + ')', showCancel: false });
-      });
-  },
-
-  _doAutoLock() {
-    this._needAutoLock = false;
-    this._autoLocked = true;
-    if (this._lockTimer) {
-      clearTimeout(this._lockTimer);
-      this._lockTimer = null;
-    }
-    // 基准默认就在正北(baselineAngle=0)，自动就绪只标记"已锁定"状态
-    this.setData({ baselineSet: true, statusText: '相对角度 · 基准已锁定' });
-    wx.showToast({ title: '已锁定基准', icon: 'success' });
-  },
-
-  // —— 手势：单击罗盘 → 把基准线切换到当前手机指向；双击罗盘 → 记录历史 ——
-  onDialTap() {
-    const now = Date.now();
-    if (this.lastDialTapTime && now - this.lastDialTapTime < 300) {
-      // 双击：记录
-      clearTimeout(this.dialTapTimer);
-      this.lastDialTapTime = 0;
-      this.dialTapTimer = null;
-      this.recordCurrent();
-      return;
-    }
-    // 单击：延迟 300ms 看是否有第二击
-    this.lastDialTapTime = now;
-    this.dialTapTimer = setTimeout(() => {
-      this.lastDialTapTime = 0;
-      this.dialTapTimer = null;
-      this._setBaselineToCurrentHeading();
-    }, 300);
-  },
-
-  // 把基准线切换到当前手机指向(并把该方向设为 0°)
-  _setBaselineToCurrentHeading() {
-    const phoneHeading = this.data.phoneHeading;
-    this.engine.setReference(phoneHeading);
-    this.setData({ baselineAngle: phoneHeading, baselineSet: true });
-    wx.showToast({ title: '已设置基准', icon: 'success' });
-  },
-
-  // —— 手势：点击读数 切换度/弧度（双击此处也会记录）——
-  onReadoutTap() {
-    const now = Date.now();
-    if (now - this.lastReadoutTapTime < 300) {
-      clearTimeout(this.readoutTapTimer);
-      this.lastReadoutTapTime = 0;
-      this.recordCurrent();
-      return;
-    }
-    this.lastReadoutTapTime = now;
-    this.readoutTapTimer = setTimeout(() => {
-      this.lastReadoutTapTime = 0;
-      this.toggleUnit();
-    }, 300);
-  },
-
-  // 点击 HUD 切换 度数 / 弧度
-  toggleUnit() {
-    const unit = this.engine.toggleUnit();
-    app.globalData.unit = unit;
-    wx.setStorageSync('unit_preference', unit);
-    // 用当前测量值重发一次，以刷新 displayValue
-    this.engine._emit(this.data.phoneHeading, this.data.isSnap);
-    this.setData({ unit });
-  },
-
-  // 记录当前测量值
-  recordCurrent() {
-    // 当前测量角 = 引擎平滑后的 angle（s.angle），不是 phoneHeading
-    const angleDeg = this.engine.smoothAngle;
-    const count = storage.addRecord({
-      angleDeg,
-      unit: this.data.unit,
-      note: '',
+  _startEngine() {
+    this.engine.start().catch((e) => {
+      const msg = (e && e.errMsg) || '';
+      let title = '无法启动传感器';
+      let tip = '请到 iPhone「设置 → 隐私与安全性 → 运动与健身 → 微信」开启权限，然后上滑彻底关闭微信重开。';
+      if (msg.indexOf('privacy') >= 0) {
+        title = '需先同意隐私协议';
+        tip = '请在弹出的隐私协议中点击「同意」。';
+      } else if (msg.indexOf('auth') >= 0 || msg.indexOf('deny') >= 0) {
+        title = '运动权限被拒绝';
+        tip = 'iOS 已缓存拒绝记录。请去「设置 → 隐私与安全性 → 运动与健身 → 微信」开启，并彻底关闭微信重开。';
+      }
+      wx.showModal({ title, content: tip, showCancel: false });
     });
-    this.setData({ recordCount: count });
-    wx.showToast({ title: '已记录', icon: 'success' });
   },
 
-  // 左上角汉堡 → 查看全部历史
-  goHistory() {
-    wx.navigateTo({ url: '/pages/history/history' });
-  },
+  // —— rAF 插值循环：低频传感器数据 → 60fps 流畅渲染 ——
+  _startLoop() {
+    if (this._rafOn || this._destroyed) return;
+    this._rafOn = true;
+    const step = () => {
+      if (this._destroyed || !this._rafOn) { this._rafOn = false; return; }
+      const t = this._target, c = this._cur;
 
-  _angleToCardinal(angle) {
-    let d = angle % 360;
-    if (d < 0) d += 360;
-    const idx = Math.round(d / 45) % 8;
-    const labels = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
-    return labels[idx];
-  },
+      // heading 沿最短路径插值（处理 359°→0° 跳变）
+      let dh = t.heading - c.heading;
+      if (dh > 180) dh -= 360;
+      if (dh < -180) dh += 360;
+      c.heading = (c.heading + dh * EASE + 360) % 360;
+      c.beta += (t.beta - c.beta) * EASE;
+      c.gamma += (t.gamma - c.gamma) * EASE;
 
-  _buildStatus(isSnap, baselineSet, isLevel) {
-    if (isLevel) return '水平 · 基准已锁定';
-    if (isSnap) return '已归零';
-    if (baselineSet) return '相对角度 · 基准已锁定';
-    return '正在校准基准…';
-  },
+      const done =
+        Math.abs(dh) < EPS &&
+        Math.abs(t.beta - c.beta) < EPS &&
+        Math.abs(t.gamma - c.gamma) < EPS;
+      if (done) {
+        c.heading = t.heading;
+        c.beta = t.beta;
+        c.gamma = t.gamma;
+      }
 
-  // —— 社交裂变：分享给好友 / 朋友圈，利于冷启动获客 ——
-  onShareAppMessage() {
-    return {
-      title: `我用电子量角器测出 ${this.data.displayValue}，来试试你的手感`,
-      path: '/pages/index/index',
+      const isFlat = Math.abs(c.beta) < 50;
+      const tilt = isFlat
+        ? Math.sqrt(c.beta * c.beta + c.gamma * c.gamma)
+        : Math.abs(c.gamma);
+      const tiltStr = tilt < 0.5 ? '0' : tilt.toFixed(1);
+
+      // 水平仪十字与指针十字线重合（达到水平）时触发一次震动反馈
+      const isLevelNow = Math.sqrt(c.beta * c.beta + c.gamma * c.gamma) < 0.5;
+      if (isLevelNow && !this._prevLevel) {
+        wx.vibrateShort({ type: 'medium' });
+      }
+      this._prevLevel = isLevelNow;
+
+      // 相对读数（0.1° 精度）
+      const rel = this._computeRelative(c.heading);
+      let relStr = '';
+      if (rel !== null) {
+        const v = Math.round(rel * 10) / 10;
+        relStr = (v >= 0 ? '+' : '') + v.toFixed(1) + '°';
+      }
+
+      this.setData({
+        heading: c.heading,
+        displayHeading: Math.round(c.heading),
+        beta: c.beta,
+        gamma: c.gamma,
+        cardinalName: t.cardinalName,
+        isLevel: t.isLevel,
+        tiltDegrees: tiltStr,
+        relativeHeading: rel,
+        relativeStr: relStr,
+      });
+
+      if (done) { this._rafOn = false; return; }
+      this._raf = this._nextFrame(step);
     };
+    this._raf = this._nextFrame(step);
+  },
+
+  _nextFrame(cb) {
+    if (typeof requestAnimationFrame === 'function') {
+      return requestAnimationFrame(cb);
+    }
+    return setTimeout(cb, 16);
+  },
+
+  _stopLoop() {
+    this._rafOn = false;
+    if (this._raf) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(this._raf);
+      } else {
+        clearTimeout(this._raf);
+      }
+      this._raf = 0;
+    }
+  },
+
+  onSwiperChange(e) {
+    this.setData({ currentPage: e.detail.current });
+  },
+
+  // 罗盘组件上报基准刻度变化
+  onRefChange(e) {
+    this._refAngle = (e && e.detail && typeof e.detail.refAngle === 'number') ? e.detail.refAngle : null;
+  },
+
+  // 双击罗盘：记录一次测量（基准 + 偏移量）
+  onMeasure(e) {
+    if (!e || !e.detail) return;
+    const { refAngle, delta } = e.detail;
+    if (typeof refAngle !== 'number' || typeof delta !== 'number') return;
+
+    // 静止判定：手机不稳定时禁止记录，避免动态误差
+    if (!this._isStill) {
+      wx.showToast({ title: '请保持手机静止后再记录', icon: 'none' });
+      return;
+    }
+
+    // 倾斜提示：手机倾斜过大时磁力计误差显著增大
+    const b = this.data.beta, g = this.data.gamma;
+    if (Math.abs(b) > 15 || Math.abs(g) > 15) {
+      wx.showToast({ title: '请平放手机后测量', icon: 'none' });
+      return;
+    }
+
+    const d = new Date();
+    const pad = (n) => (n < 10 ? '0' + n : '' + n);
+    const baseNum = Math.round(refAngle * 10) / 10;
+    const deltaNum = Math.round(delta * 10) / 10;
+    const record = {
+      id: Date.now() + '_' + Math.floor(Math.random() * 1000),
+      timeStr: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+      base: baseNum,
+      baseStr: baseNum.toFixed(1).replace(/\.0$/, ''),
+      delta: deltaNum,
+      deltaStr: (deltaNum >= 0 ? '+' : '') + deltaNum.toFixed(1) + '°',
+    };
+    const list = [record].concat(this.data.historyList).slice(0, 200);
+    this.setData({ historyList: list });
+    wx.setStorageSync('compass_history', list);
+  },
+
+  openHistory() {
+    this.setData({ showHistory: true });
+  },
+
+  closeHistory() {
+    this.setData({ showHistory: false });
+  },
+
+  clearHistory() {
+    wx.showModal({
+      title: '清空测量历史',
+      content: '确定要清空所有测量记录吗？',
+      confirmColor: '#FF453A',
+      success: (res) => {
+        if (res.confirm) {
+          this.setData({ historyList: [] });
+          wx.removeStorageSync('compass_history');
+        }
+      },
+    });
+  },
+
+  noop() {},
+
+  // 指针与基准的相对读数：从基准顺时针为正，逆时针为负（范围 (-180, 180]），0.1° 精度
+  _computeRelative(heading) {
+    if (this._refAngle === null || this._refAngle === undefined) return null;
+    let rel = ((heading - this._refAngle) % 360 + 360) % 360;
+    if (rel > 180) rel -= 360;
+    return Math.round(rel * 10) / 10;
+  },
+
+  onShareAppMessage() {
+    return { title: '指南针', path: '/pages/index/index' };
   },
   onShareTimeline() {
-    return {
-      title: '电子量角器 · 机械手感，精准测量',
-      query: '',
-    };
+    return { title: '指南针' };
   },
 });

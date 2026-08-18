@@ -1,125 +1,237 @@
-/* pages/index/index.wxss */
+/* pages/index/index.wxss — iOS 指南针风格 */
 .page {
-  min-height: 100vh;
+  height: 100vh;
   background: #000000;
+  position: relative;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.swiper {
+  width: 100%;
+  height: 100%;
+}
+
+.page-content {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  padding: calc(88rpx + env(safe-area-inset-top)) 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  align-items: center;
+  padding: 0 32rpx;
   box-sizing: border-box;
 }
 
-/* —— 顶部栏：左汉堡 / 右基准+统计 —— */
-.top-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  min-height: 72rpx;
-}
-
-.hamburger {
-  width: 64rpx;
-  height: 56rpx;
-  display: flex;
-  flex-direction: column;
+/* ============ 指南针页 ============ */
+.compass-page {
   justify-content: center;
-  gap: 10rpx;
-  padding: 8rpx 12rpx;
-  box-sizing: border-box;
-}
-.hamburger .bar {
-  height: 4rpx;
-  width: 40rpx;
-  background: #e5e5ea;
-  border-radius: 2rpx;
-}
-.hamburger.hover .bar {
-  background: #9ca3af;
+  padding-top: 0;
+  position: relative;
 }
 
-.top-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-.baseline-pill {
-  font-size: 22rpx;
-  color: #6b7280;
-  padding: 6rpx 18rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid #2c2c2e;
-}
-.baseline-pill.locked {
-  color: #f59e0b;
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.12);
-}
-.stats-text {
-  margin-top: 10rpx;
-  font-size: 22rpx;
-  color: #6b7280;
-  font-variant-numeric: tabular-nums;
-}
-
-/* —— 罗盘 —— */
 .dial-area {
-  flex: 1;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 0;
-  padding: 16rpx 0;
+  margin-top: 0;
 }
 
-/* —— 底部读数 —— */
-.bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-bottom: 8rpx;
-}
-.readout {
+/* 方位大读数 */
+.heading-readout {
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: center;
+  margin-top: 100rpx;
   line-height: 1;
 }
-.readout-value {
-  font-size: 144rpx;
-  font-weight: 200;
-  letter-spacing: -2rpx;
-  color: #ffffff;
+.heading-value {
+  font-size: 140rpx;
+  font-weight: 100;
+  color: #FFFFFF;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -4rpx;
+}
+.heading-cardinal {
+  font-size: 68rpx;
+  font-weight: 300;
+  color: #FFFFFF;
+  margin-left: 16rpx;
+}
+
+/* 指针与基准的相对读数（锁定基准时显示，绝对定位不挤压布局） */
+.relative-readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 120rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.relative-readout text {
+  font-size: 56rpx;
+  font-weight: 300;
+  color: #E60012;
   font-variant-numeric: tabular-nums;
 }
-.readout-value.snap { color: #4ade80; }
-.readout-value.hold { color: #f59e0b; }
 
-.readout-cardinal {
-  margin-left: 18rpx;
-  margin-top: 18rpx;
-  font-size: 48rpx;
-  font-weight: 500;
-  color: #ffffff;
+/* ============ 水平仪页 ============ */
+.level-page {
+  justify-content: center;
 }
-
-.readout-subtitle {
+.level-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tilt-readout {
+  margin-top: 80rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+}
+.tilt-value {
+  font-size: 120rpx;
+  font-weight: 100;
+  color: #FFFFFF;
+  font-variant-numeric: tabular-nums;
+}
+.level-hint {
   margin-top: 16rpx;
-  font-size: 28rpx;
-  color: #9ca3af;
-  text-align: center;
 }
-.readout-subtitle.warn {
-  color: #fbbf24;
+.level-hint text {
+  font-size: 34rpx;
+  color: #30D158;
 }
 
-.gesture-hint {
-  margin-top: 40rpx;
-  padding: 0 20rpx;
-  text-align: center;
+/* ============ 页面指示点 ============ */
+.page-dots {
+  position: absolute;
+  bottom: calc(16rpx + env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 14rpx;
+  z-index: 10;
 }
-.gesture-hint text {
-  font-size: 22rpx;
-  color: #4b5563;
-  line-height: 1.5;
+.dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  transition: all 0.2s ease;
+}
+.dot.active {
+  background: rgba(255,255,255,0.9);
+}
+
+/* ============ 右下角历史入口（三道杠） ============ */
+.menu-btn {
+  position: absolute;
+  right: 36rpx;
+  bottom: calc(90rpx + env(safe-area-inset-bottom));
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  z-index: 20;
+}
+.menu-line {
+  width: 40rpx;
+  height: 4rpx;
+  border-radius: 2rpx;
+  background: #FFFFFF;
+}
+
+/* ============ 历史记录面板 ============ */
+.history-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+}
+.history-panel {
+  width: 100%;
+  max-height: 65vh;
+  background: #1C1C1E;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.history-header {
+  display: flex;
+  align-items: center;
+  padding-bottom: 24rpx;
+  border-bottom: 1rpx solid rgba(255,255,255,0.12);
+}
+.history-title {
+  flex: 1;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+.history-clear {
+  font-size: 28rpx;
+  color: #FF453A;
+  margin-right: 32rpx;
+}
+.history-close {
+  font-size: 36rpx;
+  color: #FFFFFF;
+}
+.history-list {
+  margin-top: 16rpx;
+  max-height: 48vh;
+}
+.history-empty {
+  text-align: center;
+  color: rgba(255,255,255,0.4);
+  font-size: 28rpx;
+  padding: 60rpx 0;
+}
+.history-item {
+  padding: 24rpx 8rpx;
+  border-bottom: 1rpx solid rgba(255,255,255,0.08);
+}
+.history-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.history-time {
+  font-size: 26rpx;
+  color: rgba(255,255,255,0.5);
+}
+.history-delta {
+  font-size: 40rpx;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.history-delta.pos {
+  color: #30D158;
+}
+.history-delta.neg {
+  color: #FF453A;
+}
+.history-base {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 26rpx;
+  color: rgba(255,255,255,0.6);
 }

@@ -1,0 +1,4 @@
+<!-- components/level/level.wxml -->
+<view class="level-wrap">
+  <canvas type="2d" id="levelCanvas" class="level-canvas"></canvas>
+</view>

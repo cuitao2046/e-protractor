@@ -1,10 +1,7 @@
 {
   "usingComponents": {
-    "protractor-dial": "/components/protractor-dial/protractor-dial"
+    "compass-dial": "/components/protractor-dial/protractor-dial",
+    "level": "/components/level/level"
   },
-  "navigationStyle": "custom",
-  "disableScroll": true,
-  "navigationBarTitleText": "电子量角器",
-  "enableShareAppMessage": true,
-  "enableShareTimeline": true
+  "navigationBarTitleText": "指南针"
 }

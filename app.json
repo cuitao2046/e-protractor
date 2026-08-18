@@ -1,24 +1,22 @@
 {
   "pages": [
-    "pages/index/index",
-    "pages/history/history"
+    "pages/index/index"
   ],
   "window": {
-    "navigationBarBackgroundColor": "#0b0f1a",
+    "navigationBarBackgroundColor": "#000000",
     "navigationBarTextStyle": "white",
-    "navigationBarTitleText": "电子量角器",
-    "backgroundColor": "#0b0f1a",
-    "backgroundColorTop": "#0b0f1a",
-    "backgroundColorBottom": "#0b0f1a"
+    "navigationBarTitleText": "指南针",
+    "backgroundColor": "#000000",
+    "backgroundColorTop": "#000000",
+    "backgroundColorBottom": "#000000"
   },
   "sitemapLocation": "sitemap.json",
   "__usePrivacyCheck__": true,
   "permission": {
     "scope.userLocation": {
-      "desc": "用于测量时记录位置标签（可选）"
+      "desc": "用于获取您当前的方位信息"
     }
   },
-  "requiredPrivateInfos": [],
   "style": "v2",
   "lazyCodeLoading": "requiredComponents"
 }

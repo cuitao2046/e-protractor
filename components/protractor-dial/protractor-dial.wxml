@@ -1,4 +1,4 @@
-<!-- components/protractor-dial/protractor-dial.wxml -->
-<view class="dial-wrap">
-  <canvas type="2d" id="dialCanvas" class="dial-canvas"></canvas>
+<!-- components/compass-dial/compass-dial.wxml -->
+<view class="compass-wrap" bindtap="onTap">
+  <canvas type="2d" id="compassCanvas" class="compass-canvas"></canvas>
 </view>

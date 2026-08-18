@@ -1,0 +1,11 @@
+/* components/level/level.wxss */
+.level-wrap {
+  width: 600rpx;
+  height: 600rpx;
+  position: relative;
+}
+.level-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
