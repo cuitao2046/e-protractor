@@ -71,7 +71,6 @@ Component({
       const cx = W / 2, cy = H / 2;
       const R = Math.min(W, H) / 2 - 10;
       if (R <= 0) return; // 尺寸未就绪时直接跳过，避免负半径抛异常
-      const dialRad = (-angle * Math.PI) / 180;
 
       ctx.clearRect(0, 0, W, H);
 
@@ -84,10 +83,7 @@ Component({
       ctx.strokeStyle = '#2c2c2e';
       ctx.stroke();
 
-      // —— 旋转刻度环 ——
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(dialRad);
+      // —— 固定刻度环（盘面不随转动旋转，方向保持恒定）——
       for (let d = 0; d < 360; d++) {
         const rad = (d * Math.PI) / 180;
         const isMajor = d % 10 === 0;
@@ -95,29 +91,27 @@ Component({
         const rIn = R - (isMajor ? 22 : (isMedium ? 14 : 8));
         const rOut = R - 2;
         ctx.beginPath();
-        ctx.moveTo(Math.sin(rad) * rIn, -Math.cos(rad) * rIn);
-        ctx.lineTo(Math.sin(rad) * rOut, -Math.cos(rad) * rOut);
+        ctx.moveTo(cx + Math.sin(rad) * rIn, cy - Math.cos(rad) * rIn);
+        ctx.lineTo(cx + Math.sin(rad) * rOut, cy - Math.cos(rad) * rOut);
         ctx.lineWidth = isMajor ? 2 : 1;
         ctx.strokeStyle = isMajor ? '#ffffff' : '#6b7280';
         ctx.stroke();
       }
-      ctx.restore();
 
-      // —— 正向数字（每 30°）——
+      // —— 正向数字（每 30°，固定不转）——
       ctx.fillStyle = '#ffffff';
       ctx.font = '500 13px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (let d = 0; d < 360; d += 30) {
-        const screenAngle = d - angle;
-        const rad = (screenAngle * Math.PI) / 180;
+        const rad = (d * Math.PI) / 180; // 固定：0 在顶部、顺时针递增
         const rText = R - 38;
         const x = cx + Math.sin(rad) * rText;
         const y = cy - Math.cos(rad) * rText;
         ctx.fillText(String(d), x, y);
       }
 
-      // —— 方位字（北/东/南/西）——
+      // —— 方位字（北/东/南/西，固定不转）——
       const cardinals = [
         { d: 0, label: '北', color: '#ef4444' },
         { d: 90, label: '东', color: '#ffffff' },
@@ -126,14 +120,46 @@ Component({
       ];
       ctx.font = '700 18px sans-serif';
       for (const c of cardinals) {
-        const screenAngle = c.d - angle;
-        const rad = (screenAngle * Math.PI) / 180;
+        const rad = (c.d * Math.PI) / 180;
         const rText = R - 64;
         const x = cx + Math.sin(rad) * rText;
         const y = cy - Math.cos(rad) * rText;
         ctx.fillStyle = c.color;
         ctx.fillText(c.label, x, y);
       }
+
+      // —— 旋转指针（指示相对角度；盘面固定，仅指针转动）——
+      // 正角度 = 顺时针，与相对角度符号一致；0° 时指针朝上指向基准(北)
+      const needleRad = (angle * Math.PI) / 180;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(needleRad);
+      const needleLen = R - 8;
+      // 红头（指向被测方向）
+      ctx.beginPath();
+      ctx.moveTo(0, -needleLen);
+      ctx.lineTo(-8, -14);
+      ctx.lineTo(8, -14);
+      ctx.closePath();
+      ctx.fillStyle = '#ff453a';
+      ctx.fill();
+      // 杆
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(0, needleLen * 0.42);
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#ff453a';
+      ctx.stroke();
+      // 尾（浅色配重）
+      ctx.beginPath();
+      ctx.moveTo(0, needleLen * 0.42);
+      ctx.lineTo(-6, needleLen * 0.42 + 18);
+      ctx.lineTo(6, needleLen * 0.42 + 18);
+      ctx.closePath();
+      ctx.fillStyle = '#e5e5ea';
+      ctx.fill();
+      ctx.restore();
 
       // —— 中心暗圆 + 十字线（固定不转）——
       ctx.beginPath();
