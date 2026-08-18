@@ -11,6 +11,8 @@ Page({
     isSnap: false,
     baselineSet: false,
     isLevel: false,         // 水平仪：手机接近水平面时为 true
+    beta: 0,                // 水平仪：俯仰角（X 轴）
+    gamma: 0,               // 水平仪：横滚角（Y 轴）
     unit: 'deg',
     recordCount: 0,
     cardinalText: '北',
@@ -48,6 +50,8 @@ Page({
           isSnap: s.isSnapped,
           baselineSet: this.data.baselineSet,
           isLevel,
+          beta: s.beta || 0,
+          gamma: s.gamma || 0,
           cardinalText: this._angleToCardinal(s.angle),
           statusText: this._buildStatus(s.isSnapped, this.data.baselineSet, isLevel),
         });

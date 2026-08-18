@@ -1,20 +1,30 @@
 // components/protractor-dial/protractor-dial.js
-// 复刻 iOS 指南针的盘面 + 量角器扩展：
-//  - 盘面整体随手机旋转(rotate=-phoneHeading)：刻度环/数字/NESW 都转到正确世界方位
-//  - phoneHeading 处的红色扇形带(填充扇区) + 白色短粗线段
-//  - 顶部固定红色 N 三角(进刻度环内侧) + 中心暗圆十字(手机水平时变绿=水平仪)
-//  - 基准十字：固定在 baselineAngle(屏幕坐标系)
+// 严格复刻 iOS 指南针 + 量角器扩展
+//
+// 旋转层（与盘面绑定）：
+//  - 盘面(刻度环 + 30°间隔数字)绕 baselineAngle 旋转，让 0° 数字落在基准线上
+//  - 红色弧 + 短粗白色线段绕 phoneHeading 旋转，标记手机当前朝向
+//
+// 固定层（屏幕坐标系）：
+//  - NESW 方位字：顶/右/底/左，不随盘面转
+//  - 顶部红色 N 三角：在刻度环内侧，永远指正北
+//  - 中心暗圆 + 十字 + 水平仪气泡
+//  - 基准十字：vertical+horizontal，穿过圆心
 Component({
   properties: {
     // 手机当前朝向（0-360），从 DeviceMotion alpha
     phoneHeading: { type: Number, value: 0, observer() { this._redraw(); } },
-    // 基准线方向（0-360），初始 0（正北）
+    // 基准线方向（0-360），初始 0（正北）；盘面绕此旋转
     baselineAngle: { type: Number, value: 0, observer() { this._redraw(); } },
-    // 是否磁吸归零（靠近 0° 测量值，N 三角/红弧/白线变绿）
+    // 俯仰角 beta（X 轴），水平仪气泡 y 偏移
+    beta: { type: Number, value: 0, observer() { this._redraw(); } },
+    // 横滚角 gamma（Y 轴），水平仪气泡 x 偏移
+    gamma: { type: Number, value: 0, observer() { this._redraw(); } },
+    // 是否磁吸归零（靠近 0° 测量值，顶部三角/红弧/白针变绿）
     isSnap: { type: Boolean, value: false, observer() { this._redraw(); } },
-    // 是否已锁定基准线（锁定后才绘制基准十字）
+    // 是否已锁定基准线
     baselineSet: { type: Boolean, value: false, observer() { this._redraw(); } },
-    // 是否水平（|beta|<2 且 |gamma|<2），中心十字变绿
+    // 手机接近水平（|beta|<2 且 |gamma|<2）
     isLevel: { type: Boolean, value: false, observer() { this._redraw(); } },
   },
 
@@ -65,26 +75,28 @@ Component({
 
     _redraw() {
       if (!this._inited || !this.ctx) return;
-      const { phoneHeading, baselineAngle, isSnap, baselineSet, isLevel } = this.properties;
+      const { phoneHeading, baselineAngle, beta, gamma, isSnap, baselineSet, isLevel } = this.properties;
       this._draw(
         phoneHeading || 0,
         baselineAngle || 0,
+        beta || 0,
+        gamma || 0,
         !!isSnap,
         !!baselineSet,
         !!isLevel
       );
     },
 
-    _draw(phoneHeading, baselineAngle, isSnap, baselineSet, isLevel) {
+    _draw(phoneHeading, baselineAngle, beta, gamma, isSnap, baselineSet, isLevel) {
       const ctx = this.ctx;
       const W = this.W, H = this.H;
       const cx = W / 2, cy = H / 2;
-      const R = Math.min(W, H) / 2 - 20;
+      const R = Math.min(W, H) / 2 - 20; // 内缩 20，给数字留外侧空间
       if (R <= 0) return;
 
       ctx.clearRect(0, 0, W, H);
 
-      // —— 1. 外圈底盘（仿 iOS 暗灰）——
+      // ====================== 1. 外圈底盘（固定） ======================
       ctx.beginPath();
       ctx.arc(cx, cy, R, 0, Math.PI * 2);
       ctx.fillStyle = '#1c1c1e';
@@ -93,21 +105,13 @@ Component({
       ctx.strokeStyle = '#2c2c2e';
       ctx.stroke();
 
-      // —— 2. 旋转的盘面（随 phoneHeading 旋转，NESW 指向真实世界方位）——
+      // ====================== 2. 旋转层：盘面(刻度环 + 30°数字) ======================
+      // 盘面绕 baselineAngle 旋转，让 0° 数字永远落在基准方向
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate((-phoneHeading * Math.PI) / 180);
+      ctx.rotate((baselineAngle * Math.PI) / 180);
 
-      // 2a. 红色扇形带（仿 iOS：phoneHeading 两侧各约 15° 的填充扇区）
-      const sectorHalf = 0.26; // radians
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, R - 1, -sectorHalf, sectorHalf);
-      ctx.closePath();
-      ctx.fillStyle = isSnap ? 'rgba(74, 222, 128, 0.55)' : 'rgba(255, 59, 48, 0.55)';
-      ctx.fill();
-
-      // 2b. 刻度环（1°/5°/10°/30°）
+      // 刻度环：1° 细 / 5° 中 / 10° 粗 / 30° 主
       for (let d = 0; d < 360; d++) {
         const rad = (d * Math.PI) / 180;
         const isMajor = d % 30 === 0;
@@ -123,7 +127,7 @@ Component({
         ctx.stroke();
       }
 
-      // 2c. 数字（30° 间隔，刻度环外侧）
+      // 30° 间隔数字，位于刻度环外侧
       ctx.fillStyle = '#ffffff';
       ctx.font = '500 11px sans-serif';
       ctx.textAlign = 'center';
@@ -136,74 +140,114 @@ Component({
         ctx.fillText(String(d), x, y);
       }
 
-      // 2d. 方位字（北红/东南西白，刻度环内侧）
+      ctx.restore();
+      // ====================== 旋转层结束 ======================
+
+      // ====================== 3. 固定层：NESW 方位字 ======================
+      // NESW 必须在屏幕固定位置（顶/右/底/左），不随盘面转
       const cardinals = [
         { d: 0, label: '北', color: '#ff3b30' },
         { d: 90, label: '东', color: '#ffffff' },
         { d: 180, label: '南', color: '#ffffff' },
         { d: 270, label: '西', color: '#ffffff' },
       ];
-      ctx.font = '600 16px sans-serif';
+      ctx.font = '700 20px sans-serif';
       for (const c of cardinals) {
         const rad = (c.d * Math.PI) / 180;
-        const rText = R - 36;
-        const x = Math.sin(rad) * rText;
-        const y = -Math.cos(rad) * rText;
+        const rText = R - 40;
+        const x = cx + Math.sin(rad) * rText;
+        const y = cy - Math.cos(rad) * rText;
         ctx.fillStyle = c.color;
         ctx.fillText(c.label, x, y);
       }
 
-      ctx.restore();
-
-      // —— 3. 中心暗圆 + 中心十字（水平仪：手机水平时十字变绿）——
-      ctx.beginPath();
-      ctx.arc(cx, cy, R * 0.15, 0, Math.PI * 2);
-      ctx.fillStyle = '#0a0a0a';
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.moveTo(cx - R * 0.1, cy);
-      ctx.lineTo(cx + R * 0.1, cy);
-      ctx.moveTo(cx, cy - R * 0.1);
-      ctx.lineTo(cx, cy + R * 0.1);
-      ctx.lineWidth = 0.8;
-      ctx.strokeStyle = isLevel ? '#4ade80' : '#4b5563';
-      ctx.stroke();
-
-      // —— 4. 顶部固定红色 N 三角（进刻度环内侧，磁吸时变绿）——
+      // ====================== 4. 固定层：顶部红色 N 三角 ======================
+      // 位于刻度环内侧(NESW 之上)，永远指正北
       const triColor = isSnap ? '#4ade80' : '#ff3b30';
       ctx.beginPath();
-      ctx.moveTo(cx, cy - R + 18);     // 尖端比之前更靠内
-      ctx.lineTo(cx - 5, cy - R + 30);
-      ctx.lineTo(cx + 5, cy - R + 30);
+      ctx.moveTo(cx, cy - R + 22);
+      ctx.lineTo(cx - 6, cy - R + 36);
+      ctx.lineTo(cx + 6, cy - R + 36);
       ctx.closePath();
       ctx.fillStyle = triColor;
       ctx.fill();
 
-      // —— 5. 白色短粗线段（紧贴 N 三角下方，固定表示当前手机朝向=顶部）——
+      // ====================== 5. 固定层：中心暗圆 + 十字 ======================
+      const innerR = R * 0.22;
       ctx.beginPath();
-      ctx.moveTo(cx, cy - R + 32);
-      ctx.lineTo(cx, cy - R + 46);
+      ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(cx - R * 0.12, cy);
+      ctx.lineTo(cx + R * 0.12, cy);
+      ctx.moveTo(cx, cy - R * 0.12);
+      ctx.lineTo(cx, cy + R * 0.12);
+      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = '#4b5563';
+      ctx.stroke();
+
+      // ====================== 6. 固定层：水平仪气泡 ======================
+      // beta = 俯仰(X)，gamma = 横滚(Y)；手机接近水平时气泡居中
+      // scale: 每度 1.6px，让 ±30° 满幅 ≈ 中心暗圆
+      const levelScale = 1.6;
+      const bx = cx + gamma * levelScale;
+      const by = cy + beta * levelScale;
+      // 气泡轨道（极浅的圆环提示可移动范围）
+      ctx.beginPath();
+      ctx.arc(cx, cy, innerR * 0.85, 0, Math.PI * 2);
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.stroke();
+      // 气泡本体
+      ctx.beginPath();
+      ctx.arc(bx, by, 4, 0, Math.PI * 2);
+      ctx.fillStyle = isLevel ? '#4ade80' : '#ffffff';
+      ctx.fill();
+
+      // ====================== 7. 固定层：基准十字 ======================
+      // 仅在已锁定基准线时绘制；颜色与盘面线一致(白色低透明度)
+      if (baselineSet) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        // 基准十字的横竖线方向是固定的(与屏幕轴对齐)，不是 baselineAngle
+        // 这样"垂直交叉"的观感最接近"经线/纬线"
+        ctx.beginPath();
+        ctx.moveTo(-(R - 4), 0);
+        ctx.lineTo(R - 4, 0);
+        ctx.moveTo(0, -(R - 4));
+        ctx.lineTo(0, R - 4);
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = isSnap ? 'rgba(74, 222, 128, 0.45)' : 'rgba(255, 255, 255, 0.3)';
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ====================== 8. 旋转层：红色弧 + 短粗白色线段 ======================
+      // 绕 phoneHeading 旋转，标记手机当前朝向
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((phoneHeading * Math.PI) / 180);
+
+      // 红色弧：宽度扩到 60°(各 30°)，更接近 iOS 视觉
+      const arcWidth = 0.52;
+      ctx.beginPath();
+      ctx.arc(0, 0, R - 2, -arcWidth, arcWidth);
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = isSnap ? '#4ade80' : '#ff3b30';
+      ctx.stroke();
+
+      // 白色短粗线段：从外沿向内延伸到约 82% 半径
+      ctx.beginPath();
+      ctx.moveTo(0, -(R - 2));
+      ctx.lineTo(0, -R * 0.82);
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
 
-      // —— 6. 基准十字（固定在屏幕坐标 baselineAngle，色系与盘面线条一致）——
-      if (baselineSet) {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate((baselineAngle * Math.PI) / 180);
-        ctx.beginPath();
-        ctx.moveTo(0, -(R - 2));
-        ctx.lineTo(0, R - 2);
-        ctx.moveTo(-(R - 2), 0);
-        ctx.lineTo(R - 2, 0);
-        ctx.lineWidth = 0.8;
-        ctx.strokeStyle = isSnap ? 'rgba(74, 222, 128, 0.5)' : 'rgba(255, 255, 255, 0.35)';
-        ctx.stroke();
-        ctx.restore();
-      }
+      ctx.restore();
     },
   },
 });

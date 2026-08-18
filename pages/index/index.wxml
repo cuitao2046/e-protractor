@@ -17,7 +17,7 @@
 
   <!-- 罗盘（单击设基准，双击记录历史） -->
   <view class="dial-area" catchtap="onDialTap">
-    <protractor-dial phoneHeading="{{phoneHeading}}" baselineAngle="{{baselineAngle}}" isSnap="{{isSnap}}" baselineSet="{{baselineSet}}" isLevel="{{isLevel}}" />
+    <protractor-dial phoneHeading="{{phoneHeading}}" baselineAngle="{{baselineAngle}}" beta="{{beta}}" gamma="{{gamma}}" isSnap="{{isSnap}}" baselineSet="{{baselineSet}}" isLevel="{{isLevel}}" />
   </view>
 
   <!-- 底部读数（单击切换度/弧度） -->
