@@ -42,11 +42,16 @@ Page({
         if (this._needAutoLock && typeof s.alpha === 'number') {
           this._doAutoLock();
         }
+        // 盘面持续旋转，对 phoneHeading 做低通平滑(0.4)防止抖动
+        const raw = s.alpha || 0;
+        const prev = typeof this.data.phoneHeading === 'number' ? this.data.phoneHeading : raw;
+        const diff = (((raw - prev) % 360) + 540) % 360 - 180;
+        const phoneHeading = (((prev + diff * 0.4) % 360) + 360) % 360;
         // 水平仪：俯仰(beta) 与 横滚(gamma) 都接近 0
         const isLevel = Math.abs(s.beta || 0) < 2 && Math.abs(s.gamma || 0) < 2;
         this.setData({
           displayValue: s.displayValue,
-          phoneHeading: s.alpha || 0,
+          phoneHeading,
           isSnap: s.isSnapped,
           baselineSet: this.data.baselineSet,
           isLevel,

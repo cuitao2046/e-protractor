@@ -86,8 +86,8 @@
   line-height: 1;
 }
 .readout-value {
-  font-size: 136rpx;
-  font-weight: 300;
+  font-size: 144rpx;
+  font-weight: 200;
   letter-spacing: -2rpx;
   color: #ffffff;
   font-variant-numeric: tabular-nums;
