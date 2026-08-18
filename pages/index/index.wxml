@@ -1,39 +1,25 @@
 <!-- pages/index/index.wxml -->
-<view class="page">
-  <!-- 顶部操作栏 -->
-  <view class="topbar">
-    <view class="top-btn" bindtap="goHistory">
-      <text class="top-icon">≡</text>
-      <text class="top-label">历史 ({{recordCount}})</text>
-    </view>
-    <view class="top-btn" bindtap="setReference">
-      <text class="top-icon">⟲</text>
-      <text class="top-label">设基准</text>
-    </view>
+<view class="page" bindtap="onPageTap" bindlongpress="onPageLongPress">
+  <!-- 顶部状态（仅展示记录数，不拦截手势） -->
+  <view class="status-bar">
+    <text class="status-text">记录 {{recordCount}}/1000</text>
   </view>
 
-  <!-- HUD 数值（点击切换 度/弧度） -->
-  <view class="hud" bindtap="toggleUnit">
-    <text class="hud-value {{isSnap ? 'snap' : (holdLatched ? 'hold' : '')}}">{{displayValue}}</text>
-    <text class="hud-hint">点击切换 ° / rad</text>
-    <view wx:if="{{isTiltWarning}}" class="tilt-warn">⚠ 请尽量贴紧测量面以保证精度</view>
-    <view wx:if="{{holdLatched}}" class="hold-tip" bindtap="releaseHold">🔒 已自动锁定（点击解除）</view>
-  </view>
-
-  <!-- 拟物仪表盘 -->
+  <!-- 指南针式罗盘盘面 -->
   <view class="dial-area">
     <protractor-dial angle="{{smoothAngle}}" isSnap="{{isSnap}}" holdLatched="{{holdLatched}}" />
   </view>
 
-  <!-- 主操作 -->
-  <view class="actions">
-    <button class="btn btn-primary action-main" bindtap="toggleStart">
-      {{started ? '暂停' : '开始测量'}}
-    </button>
-    <button class="btn btn-ghost action-rec" bindtap="recordCurrent">
-      ＋ 记录 ({{recordCount}}/1000)
-    </button>
-  </view>
+  <!-- 底部大读数 -->
+  <view class="bottom">
+    <view class="readout" catchtap="onReadoutTap">
+      <text class="readout-value {{isSnap ? 'snap' : (holdLatched ? 'hold' : '')}}">{{displayValue}}</text>
+      <text class="readout-cardinal">{{cardinalText}}</text>
+    </view>
+    <text class="readout-subtitle {{isTiltWarning ? 'warn' : ''}}">{{statusText}}</text>
 
-  <view class="tip">提示：在平面上转动手机即可测量相对转角；接近基准线会自动磁吸锁定。</view>
+    <view class="gesture-hint">
+      <text>单击屏幕 开始/停止 · 长按 设基准 · 双击 记录 · 点击读数 切换单位</text>
+    </view>
+  </view>
 </view>

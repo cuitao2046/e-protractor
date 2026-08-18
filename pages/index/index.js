@@ -13,6 +13,8 @@ Page({
     unit: 'deg',
     recordCount: 0,
     started: false,
+    cardinalText: '北',
+    statusText: '已暂停 · 单击屏幕开始',
   },
 
   onLoad() {
@@ -35,6 +37,8 @@ Page({
           isSnap: s.isSnapped,
           holdLatched: s.holdLatched,
           isTiltWarning: s.isTiltWarning,
+          cardinalText: this._angleToCardinal(s.angle),
+          statusText: this._buildStatus(s.isTiltWarning, s.holdLatched),
         });
       },
     });
@@ -50,7 +54,7 @@ Page({
 
   onHide() {
     this.engine && this.engine.stop();
-    this.setData({ started: false });
+    this.setData({ started: false, statusText: '已暂停 · 单击屏幕继续' });
   },
 
   onUnload() {
@@ -58,18 +62,64 @@ Page({
     this.engine && this.engine.stop();
     this.tickAudio && this.tickAudio.destroy();
     this.snapAudio && this.snapAudio.destroy();
+    if (this.tapTimer) clearTimeout(this.tapTimer);
+    if (this.readoutTapTimer) clearTimeout(this.readoutTapTimer);
+  },
+
+  // —— 手势：单击屏幕 开始/停止 ——
+  onPageTap() {
+    const now = Date.now();
+    if (now - this.lastTapTime < 300) {
+      clearTimeout(this.tapTimer);
+      this.lastTapTime = 0;
+      this.recordCurrent();
+      return;
+    }
+    this.lastTapTime = now;
+    this.tapTimer = setTimeout(() => {
+      this.lastTapTime = 0;
+      this.toggleStart();
+    }, 300);
+  },
+
+  // —— 手势：长按屏幕 设为基准 ——
+  onPageLongPress() {
+    if (!this.data.started) {
+      wx.showToast({ title: '请先开始测量', icon: 'none' });
+      return;
+    }
+    this.engine.setReference();
+    this.engine.releaseHold();
+    this.setData({ holdLatched: false });
+    wx.showToast({ title: '已设为基准', icon: 'success' });
+  },
+
+  // —— 手势：点击读数 切换度/弧度（双击此处也会记录）——
+  onReadoutTap() {
+    const now = Date.now();
+    if (now - this.lastReadoutTapTime < 300) {
+      clearTimeout(this.readoutTapTimer);
+      this.lastReadoutTapTime = 0;
+      this.recordCurrent();
+      return;
+    }
+    this.lastReadoutTapTime = now;
+    this.readoutTapTimer = setTimeout(() => {
+      this.lastReadoutTapTime = 0;
+      this.toggleUnit();
+    }, 300);
   },
 
   // 开始 / 暂停测量
   async toggleStart() {
     if (this.data.started) {
       this.engine.stop();
-      this.setData({ started: false });
+      this.setData({ started: false, statusText: '已暂停 · 单击屏幕继续' });
       return;
     }
     try {
       await this.engine.start();
-      this.setData({ started: true });
+      this.setData({ started: true, statusText: '相对角度' });
       wx.showToast({ title: '转动手机开始测量', icon: 'none' });
     } catch (e) {
       const msg = (e && e.errMsg) || '';
@@ -101,20 +151,8 @@ Page({
     const unit = this.engine.toggleUnit();
     app.globalData.unit = unit;
     wx.setStorageSync('unit_preference', unit);
-    // 重新推送一次显示值
     this.engine._emit(this.data.smoothAngle, this.data.isTiltWarning);
     this.setData({ unit });
-  },
-
-  // 设为基准线（一键归零）
-  setReference() {
-    if (!this.data.started) {
-      wx.showToast({ title: '请先开始测量', icon: 'none' });
-      return;
-    }
-    this.engine.setReference();
-    this.engine.releaseHold();
-    this.setData({ holdLatched: false });
   },
 
   // 释放 Auto-Hold 锁定
@@ -125,15 +163,11 @@ Page({
 
   // 记录当前测量值
   recordCurrent() {
-    if (!this.data.started) {
-      wx.showToast({ title: '请先开始测量', icon: 'none' });
-      return;
-    }
     const angleDeg = this.data.smoothAngle;
     const count = storage.addRecord({
       angleDeg,
       unit: this.data.unit,
-      note: this.data.holdLatched ? '自动锁定' : '',
+      note: this.data.holdLatched ? '自动锁定' : (!this.data.started ? '暂停记录' : ''),
     });
     this.setData({
       recordCount: count,
@@ -145,6 +179,21 @@ Page({
 
   goHistory() {
     wx.switchTab({ url: '/pages/history/history' });
+  },
+
+  _angleToCardinal(angle) {
+    let d = angle % 360;
+    if (d < 0) d += 360;
+    const idx = Math.round(d / 45) % 8;
+    const labels = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+    return labels[idx];
+  },
+
+  _buildStatus(isTiltWarning, holdLatched) {
+    if (isTiltWarning) return '请尽量贴紧测量面以保证精度';
+    if (holdLatched) return '已自动锁定';
+    if (this.data.started) return '相对角度';
+    return '已暂停 · 单击屏幕继续';
   },
 
   // —— 社交裂变：分享给好友 / 朋友圈，利于冷启动获客 ——

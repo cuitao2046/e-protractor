@@ -1,12 +1,11 @@
 /* components/protractor-dial/protractor-dial.wxss */
 .dial-wrap {
-  width: 600rpx;
-  height: 600rpx;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
   position: relative;
 }
 .dial-canvas {
-  width: 600rpx;
-  height: 600rpx;
+  width: 100%;
+  height: 100%;
   display: block;
 }

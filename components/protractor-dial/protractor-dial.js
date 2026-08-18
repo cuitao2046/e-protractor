@@ -1,12 +1,12 @@
 // components/protractor-dial/protractor-dial.js
-// 拟物仪表盘：Canvas 2D 绘制旋转刻度环 + 基准指针 + 实时弧度填充 + 磁吸高亮
+// iOS 指南针风格罗盘盘面：旋转刻度 + 正向数字/方位 + 固定顶部红针 + 中心十字
 Component({
   properties: {
     // 相对基准线的角度（度），范围 [-180, 180]
     angle: { type: Number, value: 0, observer() { this._redraw(); } },
-    // 是否磁吸归零（高亮变绿）
+    // 是否磁吸归零（顶部指针变绿）
     isSnap: { type: Boolean, value: false, observer() { this._redraw(); } },
-    // 是否 Auto-Hold 锁定
+    // 是否 Auto-Hold 锁定（可扩展视觉，当前不改变盘面）
     holdLatched: { type: Boolean, value: false, observer() { this._redraw(); } },
   },
 
@@ -56,78 +56,111 @@ Component({
       const ctx = this.ctx;
       const W = this.W, H = this.H;
       const cx = W / 2, cy = H / 2;
-      const R = Math.min(W, H) / 2 - 8;
+      const R = Math.min(W, H) / 2 - 10;
+      const dialRad = (-angle * Math.PI) / 180;
 
       ctx.clearRect(0, 0, W, H);
 
-      // 背景圆盘（毛玻璃感：半透明填充 + 描边）
+      // 外圈底盘
       ctx.beginPath();
       ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(18, 24, 38, 0.92)';
+      ctx.fillStyle = 'rgba(20, 20, 20, 0.6)';
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = isSnap ? '#4ade80' : (holdLatched ? '#f59e0b' : '#2b3550');
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#2c2c2e';
       ctx.stroke();
 
-      const accent = isSnap ? '#4ade80' : '#38bdf8';
-      const arcColor = isSnap ? 'rgba(74, 222, 128, 0.18)' : 'rgba(56, 189, 248, 0.16)';
-
-      // —— 旋转刻度环（每 5° 一格，每 30° 主刻度）——
+      // —— 旋转刻度环 ——
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate((-angle * Math.PI) / 180); // 随相对角反向微转，模拟机械表盘
-      for (let d = 0; d < 360; d += 5) {
-        const isMajor = d % 30 === 0;
+      ctx.rotate(dialRad);
+      for (let d = 0; d < 360; d++) {
         const rad = (d * Math.PI) / 180;
-        const r1 = R - (isMajor ? 26 : 14);
-        const r2 = R - 2;
+        const isMajor = d % 10 === 0;
+        const isMedium = d % 5 === 0;
+        const rIn = R - (isMajor ? 22 : (isMedium ? 14 : 8));
+        const rOut = R - 2;
         ctx.beginPath();
-        ctx.moveTo(Math.sin(rad) * r1, -Math.cos(rad) * r1);
-        ctx.lineTo(Math.sin(rad) * r2, -Math.cos(rad) * r2);
-        ctx.lineWidth = isMajor ? 3 : 1.5;
-        ctx.strokeStyle = isMajor ? '#cbd5e1' : '#475569';
+        ctx.moveTo(Math.sin(rad) * rIn, -Math.cos(rad) * rIn);
+        ctx.lineTo(Math.sin(rad) * rOut, -Math.cos(rad) * rOut);
+        ctx.lineWidth = isMajor ? 2 : 1;
+        ctx.strokeStyle = isMajor ? '#ffffff' : '#6b7280';
         ctx.stroke();
       }
       ctx.restore();
 
-      // —— 实时弧度填充（从基准线 0° 扫到当前角）——
-      const aRad = (angle * Math.PI) / 180;
-      const rArc = R * 0.72;
+      // —— 正向数字（每 30°）——
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '500 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let d = 0; d < 360; d += 30) {
+        const screenAngle = d - angle;
+        const rad = (screenAngle * Math.PI) / 180;
+        const rText = R - 38;
+        const x = cx + Math.sin(rad) * rText;
+        const y = cy - Math.cos(rad) * rText;
+        ctx.fillText(String(d), x, y);
+      }
+
+      // —— 方位字（北/东/南/西）——
+      const cardinals = [
+        { d: 0, label: '北', color: '#ef4444' },
+        { d: 90, label: '东', color: '#ffffff' },
+        { d: 180, label: '南', color: '#ffffff' },
+        { d: 270, label: '西', color: '#ffffff' },
+      ];
+      ctx.font = '700 18px sans-serif';
+      for (const c of cardinals) {
+        const screenAngle = c.d - angle;
+        const rad = (screenAngle * Math.PI) / 180;
+        const rText = R - 64;
+        const x = cx + Math.sin(rad) * rText;
+        const y = cy - Math.cos(rad) * rText;
+        ctx.fillStyle = c.color;
+        ctx.fillText(c.label, x, y);
+      }
+
+      // —— 中心暗圆 + 十字线（固定不转）——
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(cx, cy, rArc, -Math.PI / 2, -Math.PI / 2 + aRad, angle < 0);
-      ctx.closePath();
-      ctx.fillStyle = arcColor;
+      ctx.arc(cx, cy, R * 0.18, 0, Math.PI * 2);
+      ctx.fillStyle = '#1c1c1e';
       ctx.fill();
-      // 弧边描线
       ctx.beginPath();
-      ctx.arc(cx, cy, rArc, -Math.PI / 2, -Math.PI / 2 + aRad, angle < 0);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = accent;
+      ctx.moveTo(cx - R * 0.12, cy);
+      ctx.lineTo(cx + R * 0.12, cy);
+      ctx.moveTo(cx, cy - R * 0.12);
+      ctx.lineTo(cx, cy + R * 0.12);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#3a3a3c';
       ctx.stroke();
 
-      // —— 固定基准指针（顶部，amber 虚线感三角）——
+      // —— 顶部固定指向标（iOS 指南针红三角）——
+      const markerColor = isSnap ? '#4ade80' : '#ef4444';
       ctx.beginPath();
-      ctx.moveTo(cx, cy - R + 2);
-      ctx.lineTo(cx - 9, cy - R + 22);
-      ctx.lineTo(cx + 9, cy - R + 22);
+      ctx.moveTo(cx, cy - R + 4);
+      ctx.lineTo(cx - 10, cy - R + 30);
+      ctx.lineTo(cx + 10, cy - R + 30);
       ctx.closePath();
-      ctx.fillStyle = '#f59e0b';
+      ctx.fillStyle = markerColor;
       ctx.fill();
 
-      // —— 中心轴点 ——
+      // 顶部竖线（与红三角同宽，强调指向）
       ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = isSnap ? '#4ade80' : '#38bdf8';
-      ctx.fill();
+      ctx.moveTo(cx, cy - R + 30);
+      ctx.lineTo(cx, cy - R + 48);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = markerColor;
+      ctx.stroke();
 
-      // —— 当前角端点指示点 ——
-      const ex = cx + Math.sin(aRad) * rArc;
-      const ey = cy - Math.cos(aRad) * rArc;
-      ctx.beginPath();
-      ctx.arc(ex, ey, 6, 0, Math.PI * 2);
-      ctx.fillStyle = accent;
-      ctx.fill();
+      // 锁定状态小点
+      if (holdLatched) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * 0.12, 0, Math.PI * 2);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     },
   },
 });
