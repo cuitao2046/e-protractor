@@ -1,16 +1,15 @@
 // pages/index/index.js
-const { ProtractorEngine } = require('../../utils/protractor.js');
+const { ProtractorEngine, normalizeAngle } = require('../../utils/protractor.js');
 const storage = require('../../utils/storage.js');
 const app = getApp();
 
 Page({
   data: {
     displayValue: '+0.0°',
-    smoothAngle: 0,
+    phoneHeading: 0,
+    baselineAngle: 0,        // 初始 0 = 正北（与指南针正北向重叠）
     isSnap: false,
-    holdLatched: false,
     baselineSet: false,
-    isTiltWarning: false,
     unit: 'deg',
     recordCount: 0,
     cardinalText: '北',
@@ -27,28 +26,26 @@ Page({
     this.snapAudio.src = '/assets/audio/snap.wav';
     this.snapAudio.obeyMuteSwitch = false;
 
-    this._autoLocked = false;     // 本次生命周期内是否已自动锁定基准
+    this._autoLocked = false;     // 本次生命周期内是否已自动锁定
     this._needAutoLock = true;    // 等待首帧运动数据后自动锁定
-    this.lastTapTime = 0;
+    this.lastDialTapTime = 0;
     this.lastReadoutTapTime = 0;
 
     this.engine = new ProtractorEngine({
       audio: { tick: this.tickAudio, snap: this.snapAudio },
       onUpdate: (s) => {
         if (this._destroyed) return;
-        // 首帧拿到真实姿态后，自动把当前手机朝向锁定为基准(0°)
+        // 首帧拿到真实姿态后，自动标记已就绪（基准线默认在正北，基准=0°）
         if (this._needAutoLock && typeof s.alpha === 'number') {
           this._doAutoLock();
         }
         this.setData({
           displayValue: s.displayValue,
-          smoothAngle: s.angle,
+          phoneHeading: s.alpha || 0,
           isSnap: s.isSnapped,
-          holdLatched: s.holdLatched,
-          baselineSet: s.baselineSet,
-          isTiltWarning: s.isTiltWarning,
+          baselineSet: this.data.baselineSet,
           cardinalText: this._angleToCardinal(s.angle),
-          statusText: this._buildStatus(s.isTiltWarning, s.holdLatched, s.baselineSet),
+          statusText: this._buildStatus(s.isSnapped, this.data.baselineSet),
         });
       },
     });
@@ -82,13 +79,13 @@ Page({
     if (this._lockTimer) clearTimeout(this._lockTimer);
   },
 
-  // —— 打开即启动测量；首帧自动锁定基准（最多等 1s 兜底）——
+  // —— 打开即启动测量；首帧自动就绪（基准默认在正北）——
   _autoStart() {
     this.engine
       .start()
       .then(() => {
         if (this._needAutoLock && !this._autoLocked) {
-          // 若 1s 内无运动回调，也强制以当前朝向锁定，避免卡在“校准中”
+          // 若 1s 内无运动回调，也强制标记就绪，避免卡在"校准中"
           this._lockTimer = setTimeout(() => {
             if (this._needAutoLock && !this._autoLocked) this._doAutoLock();
           }, 1000);
@@ -115,7 +112,6 @@ Page({
       });
   },
 
-  // 自动/手动锁定基准：当前手机朝向设为 0°
   _doAutoLock() {
     this._needAutoLock = false;
     this._autoLocked = true;
@@ -123,25 +119,37 @@ Page({
       clearTimeout(this._lockTimer);
       this._lockTimer = null;
     }
-    this.engine.setReference();
+    // 基准默认就在正北(baselineAngle=0)，自动就绪只标记"已锁定"状态
     this.setData({ baselineSet: true, statusText: '相对角度 · 基准已锁定' });
     wx.showToast({ title: '已锁定基准', icon: 'success' });
   },
 
-  // —— 手势：长按屏幕 重新锁定基准（不影响指南针指向）——
-  onPageLongPress() {
-    this._doAutoLock();
+  // —— 手势：单击罗盘 → 把基准线切换到当前手机指向；双击罗盘 → 记录历史 ——
+  onDialTap() {
+    const now = Date.now();
+    if (this.lastDialTapTime && now - this.lastDialTapTime < 300) {
+      // 双击：记录
+      clearTimeout(this.dialTapTimer);
+      this.lastDialTapTime = 0;
+      this.dialTapTimer = null;
+      this.recordCurrent();
+      return;
+    }
+    // 单击：延迟 300ms 看是否有第二击
+    this.lastDialTapTime = now;
+    this.dialTapTimer = setTimeout(() => {
+      this.lastDialTapTime = 0;
+      this.dialTapTimer = null;
+      this._setBaselineToCurrentHeading();
+    }, 300);
   },
 
-  // —— 手势：双击屏幕 记录当前值（单击空白处无操作）——
-  onPageTap() {
-    const now = Date.now();
-    if (this.lastTapTime && now - this.lastTapTime < 300) {
-      this.lastTapTime = 0;
-      this.recordCurrent();
-    } else {
-      this.lastTapTime = now;
-    }
+  // 把基准线切换到当前手机指向(并把该方向设为 0°)
+  _setBaselineToCurrentHeading() {
+    const phoneHeading = this.data.phoneHeading;
+    this.engine.setReference(phoneHeading);
+    this.setData({ baselineAngle: phoneHeading, baselineSet: true });
+    wx.showToast({ title: '已设置基准', icon: 'success' });
   },
 
   // —— 手势：点击读数 切换度/弧度（双击此处也会记录）——
@@ -165,20 +173,21 @@ Page({
     const unit = this.engine.toggleUnit();
     app.globalData.unit = unit;
     wx.setStorageSync('unit_preference', unit);
-    this.engine._emit(this.data.smoothAngle, this.data.isTiltWarning);
+    // 用当前测量值重发一次，以刷新 displayValue
+    this.engine._emit(this.data.phoneHeading, this.data.isSnap);
     this.setData({ unit });
   },
 
   // 记录当前测量值
   recordCurrent() {
-    const angleDeg = this.data.smoothAngle;
+    // 当前测量角 = 引擎平滑后的 angle（s.angle），不是 phoneHeading
+    const angleDeg = this.engine.smoothAngle;
     const count = storage.addRecord({
       angleDeg,
       unit: this.data.unit,
-      note: this.data.holdLatched ? '自动锁定' : '',
+      note: '',
     });
-    this.setData({ recordCount: count, holdLatched: false });
-    this.engine.releaseHold();
+    this.setData({ recordCount: count });
     wx.showToast({ title: '已记录', icon: 'success' });
   },
 
@@ -195,9 +204,8 @@ Page({
     return labels[idx];
   },
 
-  _buildStatus(isTiltWarning, holdLatched, baselineSet) {
-    if (isTiltWarning) return '请尽量贴紧测量面以保证精度';
-    if (holdLatched) return '已自动锁定';
+  _buildStatus(isSnap, baselineSet) {
+    if (isSnap) return '已归零';
     if (baselineSet) return '相对角度 · 基准已锁定';
     return '正在校准基准…';
   },

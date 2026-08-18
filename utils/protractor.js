@@ -84,8 +84,9 @@ class ProtractorEngine {
   }
 
   // —— 设为基准线：一键消除当前所有静态偏差 ——
-  setReference() {
-    this.refAngle = this.rawAngle;
+  // 可选参数 angle：指定基准原始角度(0-360)；不传则使用当前 rawAngle
+  setReference(angle) {
+    this.refAngle = typeof angle === 'number' ? angle : this.rawAngle;
     this.smoothAngle = 0;
     this.isSnapped = false;
     this.snapLatched = false;

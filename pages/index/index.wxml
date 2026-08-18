@@ -1,5 +1,5 @@
 <!-- pages/index/index.wxml -->
-<view class="page" bindlongpress="onPageLongPress" bindtap="onPageTap">
+<view class="page">
 
   <!-- 顶部：左 汉堡菜单(历史) · 右 基准胶囊 + 统计 -->
   <view class="top-bar">
@@ -15,18 +15,17 @@
     </view>
   </view>
 
-  <!-- 指南针式罗盘盘面（刻度固定、指南针固定、刻度指针随手机旋转） -->
-  <view class="dial-area">
-    <protractor-dial angle="{{smoothAngle}}" isSnap="{{isSnap}}" holdLatched="{{holdLatched}}" baselineSet="{{baselineSet}}" />
+  <!-- 罗盘（单击设基准，双击记录历史） -->
+  <view class="dial-area" catchtap="onDialTap">
+    <protractor-dial phoneHeading="{{phoneHeading}}" baselineAngle="{{baselineAngle}}" isSnap="{{isSnap}}" baselineSet="{{baselineSet}}" />
   </view>
 
-  <!-- 底部读数 -->
+  <!-- 底部读数（单击切换度/弧度） -->
   <view class="bottom">
     <view class="readout" catchtap="onReadoutTap">
-      <text class="readout-value {{isSnap ? 'snap' : (holdLatched ? 'hold' : '')}}">{{displayValue}}</text>
+      <text class="readout-value {{isSnap ? 'snap' : ''}}">{{displayValue}}</text>
       <text class="readout-cardinal">{{cardinalText}}</text>
     </view>
-    <text class="readout-subtitle {{isTiltWarning ? 'warn' : ''}}">{{statusText}}</text>
-    <text class="gesture-hint">长按 锁定基准 · 双击 记录 · 点击读数 切换单位</text>
+    <text class="readout-subtitle">{{statusText}}</text>
   </view>
 </view>

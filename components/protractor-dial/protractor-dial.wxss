@@ -1,7 +1,7 @@
 /* components/protractor-dial/protractor-dial.wxss */
 .dial-wrap {
-  width: 640rpx;
-  height: 640rpx;
+  width: 700rpx;
+  height: 700rpx;
   position: relative;
 }
 .dial-canvas {
