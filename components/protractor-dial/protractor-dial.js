@@ -145,16 +145,17 @@ Component({
 
       // ====================== 3. 固定层：NESW 方位字 ======================
       // NESW 必须在屏幕固定位置（顶/右/底/左），不随盘面转
+      // 仿 iOS：字号大、加粗、北红其余白
       const cardinals = [
         { d: 0, label: '北', color: '#ff3b30' },
         { d: 90, label: '东', color: '#ffffff' },
         { d: 180, label: '南', color: '#ffffff' },
         { d: 270, label: '西', color: '#ffffff' },
       ];
-      ctx.font = '700 20px sans-serif';
+      ctx.font = '700 26px sans-serif';
       for (const c of cardinals) {
         const rad = (c.d * Math.PI) / 180;
-        const rText = R - 40;
+        const rText = R - 46;
         const x = cx + Math.sin(rad) * rText;
         const y = cy - Math.cos(rad) * rText;
         ctx.fillStyle = c.color;
@@ -162,12 +163,12 @@ Component({
       }
 
       // ====================== 4. 固定层：顶部红色 N 三角 ======================
-      // 位于刻度环内侧(NESW 之上)，永远指正北
+      // 仿 iOS：在刻度环最外缘("0"数字与刻度线之间)，尖头贴外沿、底边压住刻度环
       const triColor = isSnap ? '#4ade80' : '#ff3b30';
       ctx.beginPath();
-      ctx.moveTo(cx, cy - R + 22);
-      ctx.lineTo(cx - 6, cy - R + 36);
-      ctx.lineTo(cx + 6, cy - R + 36);
+      ctx.moveTo(cx, cy - R + 5);
+      ctx.lineTo(cx - 5, cy - R + 18);
+      ctx.lineTo(cx + 5, cy - R + 18);
       ctx.closePath();
       ctx.fillStyle = triColor;
       ctx.fill();
@@ -224,19 +225,20 @@ Component({
         ctx.restore();
       }
 
-      // ====================== 8. 旋转层：红色弧 + 短粗白色线段 ======================
+      // ====================== 8. 旋转层：红色扇形(填充) + 短粗白色线段 ======================
       // 绕 phoneHeading 旋转，标记手机当前朝向
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate((phoneHeading * Math.PI) / 180);
 
-      // 红色弧：宽度扩到 60°(各 30°)，更接近 iOS 视觉
-      const arcWidth = 0.52;
+      // 红色实心填充扇形（约 68° 宽，各 34°），仿 iOS 红色楔形
+      const sectorHalf = 0.6;
       ctx.beginPath();
-      ctx.arc(0, 0, R - 2, -arcWidth, arcWidth);
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = isSnap ? '#4ade80' : '#ff3b30';
-      ctx.stroke();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, R - 2, -sectorHalf, sectorHalf);
+      ctx.closePath();
+      ctx.fillStyle = isSnap ? 'rgba(74, 222, 128, 0.7)' : 'rgba(255, 59, 48, 0.72)';
+      ctx.fill();
 
       // 白色短粗线段：从外沿向内延伸到约 82% 半径
       ctx.beginPath();
