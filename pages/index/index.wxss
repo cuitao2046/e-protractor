@@ -42,7 +42,7 @@
 .bottom-left {
   position: absolute;
   left: 32rpx;
-  bottom: calc(120rpx + env(safe-area-inset-bottom));
+  bottom: calc(90rpx + env(safe-area-inset-bottom));
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -94,12 +94,16 @@
   color: #FFFFFF;
 }
 
-/* 磁偏角来源小字（实时定位 / 缓存位置 / 默认） */
+/* 磁偏角来源小字（实时定位 / 缓存位置 / 默认），底部中间 */
 .geo-source {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(48rpx + env(safe-area-inset-bottom));
+  z-index: 15;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding-left: 6rpx;
+  justify-content: center;
 }
 .geo-source text {
   font-size: 20rpx;

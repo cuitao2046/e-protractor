@@ -21,11 +21,11 @@
           <view class="geo-toggle {{isGeoDeclination ? 'on' : ''}}" bindtap="toggleGeoDeclination">
             <text>{{isGeoDeclination ? '位置磁偏角·开' : '位置磁偏角·关'}}</text>
           </view>
+        </view>
 
-          <!-- 磁偏角来源提示：仅在开启位置磁偏角时显示 -->
-          <view class="geo-source geo-{{geoSource}}" wx:if="{{isGeoDeclination && geoSourceText}}">
-            <text>{{geoSourceText}}</text>
-          </view>
+        <!-- 磁偏角来源提示：仅在开启位置磁偏角时显示，底部中间 -->
+        <view class="geo-source geo-{{geoSource}}" wx:if="{{isGeoDeclination && geoSourceText}}">
+          <text>{{geoSourceText}}</text>
         </view>
 
         <!-- 罗盘 -->
