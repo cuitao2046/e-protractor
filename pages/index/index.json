@@ -3,5 +3,6 @@
     "compass-dial": "/components/protractor-dial/protractor-dial",
     "level": "/components/level/level"
   },
-  "navigationBarTitleText": "指南针"
+  "navigationStyle": "custom",
+  "navigationBarTitleText": ""
 }

@@ -3,6 +3,7 @@
   height: 100vh;
   background: #000000;
   position: relative;
+  box-sizing: border-box;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -37,13 +38,20 @@
   margin-top: 0;
 }
 
-/* 真北/磁北切换药丸（罗盘页顶部居中） */
-.tn-toggle {
+/* 左下角控制组（真北/磁北 + 位置磁偏角，左对齐堆叠） */
+.bottom-left {
   position: absolute;
-  top: calc(20rpx + env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
+  left: 32rpx;
+  bottom: calc(120rpx + env(safe-area-inset-bottom));
   z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+/* 真北/磁北切换药丸 */
+.tn-toggle {
   padding: 10rpx 30rpx;
   border-radius: 999rpx;
   background: rgba(255,255,255,0.08);
@@ -64,13 +72,8 @@
   color: #FFFFFF;
 }
 
-/* 按位置算磁偏角开关（罗盘页顶部居中，真北药丸下方） */
+/* 按位置算磁偏角开关 */
 .geo-toggle {
-  position: absolute;
-  top: calc(76rpx + env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
   padding: 10rpx 30rpx;
   border-radius: 999rpx;
   background: rgba(255,255,255,0.08);
@@ -90,16 +93,13 @@
 .geo-toggle.on text {
   color: #FFFFFF;
 }
+
 /* 磁偏角来源小字（实时定位 / 缓存位置 / 默认） */
 .geo-source {
-  position: absolute;
-  top: calc(128rpx + env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-left: 6rpx;
 }
 .geo-source text {
   font-size: 20rpx;
@@ -110,9 +110,6 @@
 .geo-source.geo-live text { color: #30D158; }
 .geo-source.geo-cached text { color: #FFD60A; }
 .geo-source.geo-default text { color: rgba(255,255,255,0.45); }
-.geo-toggle.on text {
-  color: #FFFFFF;
-}
 
 /* 方位大读数 */
 .heading-readout {

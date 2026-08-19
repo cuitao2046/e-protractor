@@ -10,19 +10,22 @@
     <!-- ============ 第1页：指南针 ============ -->
     <swiper-item>
       <view class="page-content compass-page">
-        <!-- 真北/磁北切换 -->
-        <view class="tn-toggle {{isTrueNorth ? 'on' : ''}}" bindtap="toggleTrueNorth">
-          <text>{{isTrueNorth ? '真北' : '磁北'}}</text>
-        </view>
+        <!-- 左下角控制：真北/磁北 + 位置磁偏角 -->
+        <view class="bottom-left">
+          <!-- 真北/磁北切换 -->
+          <view class="tn-toggle {{isTrueNorth ? 'on' : ''}}" bindtap="toggleTrueNorth">
+            <text>{{isTrueNorth ? '真北' : '磁北'}}</text>
+          </view>
 
-        <!-- 按位置算磁偏角（WMM 实时计算） -->
-        <view class="geo-toggle {{isGeoDeclination ? 'on' : ''}}" bindtap="toggleGeoDeclination">
-          <text>{{isGeoDeclination ? '位置磁偏角·开' : '位置磁偏角·关'}}</text>
-        </view>
+          <!-- 按位置算磁偏角（WMM 实时计算） -->
+          <view class="geo-toggle {{isGeoDeclination ? 'on' : ''}}" bindtap="toggleGeoDeclination">
+            <text>{{isGeoDeclination ? '位置磁偏角·开' : '位置磁偏角·关'}}</text>
+          </view>
 
-        <!-- 磁偏角来源提示：仅在开启位置磁偏角时显示 -->
-        <view class="geo-source geo-{{geoSource}}" wx:if="{{isGeoDeclination && geoSourceText}}">
-          <text>{{geoSourceText}}</text>
+          <!-- 磁偏角来源提示：仅在开启位置磁偏角时显示 -->
+          <view class="geo-source geo-{{geoSource}}" wx:if="{{isGeoDeclination && geoSourceText}}">
+            <text>{{geoSourceText}}</text>
+          </view>
         </view>
 
         <!-- 罗盘 -->
