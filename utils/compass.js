@@ -8,6 +8,8 @@
  * - 互补滤波：陀螺仪(alpha 差分)提供短时高响应、低滞后；磁力计提供长时绝对校准、防漂移
  * - rawHeading：最近一次罗盘原始值（测量用，绕开滤波滞后）
  * - 静止判定：连续多帧角速度低于阈值判定为静止（测量精度关键）
+ * - 真北校正：useTrueNorth 开启时，按本地磁偏角(declination) 将磁北换算为真北
+ *   （真北 = 磁北 − declination，declination 西偏为正；北京 2026 约西偏 8°）
  * - 每 30° 触觉反馈（北向更强）
  *
  * 说明：alpha（陀螺仪）与罗盘方向在部分机型上相反，本实现用罗盘变化方向
@@ -38,7 +40,11 @@ const STILL_SAMPLE_N = 5;
 class CompassEngine {
   constructor(opts = {}) {
     this.onUpdate = opts.onUpdate || function () {};
-    this.heading = 0;        // 平滑显示值（供 UI 动画）
+    // 真北校正开关（默认关，显示磁北）；declination 为本地磁偏角（西偏为正，单位°）
+    this.useTrueNorth = !!opts.useTrueNorth;
+    this.declination = (typeof opts.declination === 'number') ? opts.declination : 8;
+
+    this.heading = 0;        // 平滑显示值（磁北，供内部融合/振动；UI 输出层再做真北校正）
     this.fused = 0;          // 互补滤波融合值（heading 的数据源）
     this.rawHeading = 0;     // 最近罗盘原始值（测量用）
     this.beta = 0;
@@ -56,6 +62,12 @@ class CompassEngine {
     this._alphaAtPrevCompass = null;
     // 静止样本缓冲：静止时持续采集罗盘原始值，供圆形平均输出高精度读数
     this.stillBuffer = [];
+  }
+
+  // 切换真北/磁北，立即刷新一次读数（无需等下一次传感器回调）
+  setTrueNorth(v) {
+    this.useTrueNorth = !!v;
+    this._emit();
   }
 
   start() {
@@ -216,8 +228,11 @@ class CompassEngine {
 
   _tick() {
     if (!this.inited) return;
-    // 每 30° 一个触觉反馈，北（0°）反馈更强
-    const bucket = Math.floor((((this.heading % 360) + 360) % 360) / 30);
+    // 每 30° 一个触觉反馈，北（0°）反馈更强；真北模式下按校正后角度判定
+    const raw = this.useTrueNorth
+      ? ((this.heading - this.declination) % 360 + 360) % 360
+      : this.heading;
+    const bucket = Math.floor((((raw % 360) + 360) % 360) / 30);
     if (bucket !== this.lastTickBucket) {
       this.lastTickBucket = bucket;
       wx.vibrateShort({ type: bucket === 0 ? 'medium' : 'light' });
@@ -225,15 +240,18 @@ class CompassEngine {
   }
 
   _emit() {
-    const h = this.heading;
+    // 真北校正：真北 = 磁北 − declination（declination 西偏为正）
+    const t = this.useTrueNorth ? this.declination : 0;
+    const correct = (v) => (((v - t) % 360) + 360) % 360;
+    const h = correct(this.heading);
     const idx = Math.round(h / 45) % 8;
     const isLevel = Math.abs(this.beta) < 2 && Math.abs(this.gamma) < 2;
 
     this.onUpdate({
       heading: h,
       displayHeading: Math.round(h),
-      rawHeading: this.rawHeading,             // 原始罗盘值
-      stableHeading: this.getStableHeading(),  // 高精度稳定读数（静止平均，0.1°）
+      rawHeading: correct(this.rawHeading),             // 校正后的原始罗盘值
+      stableHeading: correct(this.getStableHeading()),  // 校正后的高精度稳定读数（0.1°）
       beta: this.beta,
       gamma: this.gamma,
       cardinalName: CARDINALS[idx],

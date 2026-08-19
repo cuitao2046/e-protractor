@@ -10,6 +10,11 @@
     <!-- ============ 第1页：指南针 ============ -->
     <swiper-item>
       <view class="page-content compass-page">
+        <!-- 真北/磁北切换 -->
+        <view class="tn-toggle {{isTrueNorth ? 'on' : ''}}" bindtap="toggleTrueNorth">
+          <text>{{isTrueNorth ? '真北' : '磁北'}}</text>
+        </view>
+
         <!-- 罗盘 -->
         <view class="dial-area">
           <compass-dial

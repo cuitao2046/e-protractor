@@ -20,6 +20,7 @@ Page({
     relativeStr: '',         // 相对读数显示字符串（如 +12.5°）
     showHistory: false,      // 历史记录面板
     historyList: [],         // 测量历史：[{id, timeStr, base, baseStr, delta, deltaStr}]
+    isTrueNorth: false,      // 真北校正开关（默认磁北）
   },
 
   onLoad() {
@@ -49,7 +50,11 @@ Page({
       this.setData({ historyList: cleaned });
     }
 
+    // 真北校正偏好（本地持久化，不申请位置权限；北京 2026 约西偏 8°）
+    const savedTN = !!wx.getStorageSync('use_true_north');
     this.engine = new CompassEngine({
+      useTrueNorth: savedTN,
+      declination: 8,
       onUpdate: (s) => {
         if (this._destroyed) return;
         // 只更新目标值，由 rAF 循环插值渲染
@@ -63,6 +68,7 @@ Page({
         this._startLoop();
       },
     });
+    this.setData({ isTrueNorth: savedTN });
   },
 
   onShow() {
@@ -223,6 +229,15 @@ Page({
     const list = [record].concat(this.data.historyList).slice(0, 200);
     this.setData({ historyList: list });
     wx.setStorageSync('compass_history', list);
+  },
+
+  // 切换真北/磁北显示（默认磁北；开启后按本地磁偏角换算真北，与 iOS 真北对齐）
+  toggleTrueNorth() {
+    const nv = !this.data.isTrueNorth;
+    if (this.engine) this.engine.setTrueNorth(nv);
+    this.setData({ isTrueNorth: nv });
+    wx.setStorageSync('use_true_north', nv);
+    wx.showToast({ title: nv ? '已切换到真北' : '已切换到磁北', icon: 'none' });
   },
 
   openHistory() {

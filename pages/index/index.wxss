@@ -37,6 +37,33 @@
   margin-top: 0;
 }
 
+/* 真北/磁北切换药丸（罗盘页顶部居中） */
+.tn-toggle {
+  position: absolute;
+  top: calc(20rpx + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  padding: 10rpx 30rpx;
+  border-radius: 999rpx;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tn-toggle text {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 2rpx;
+}
+.tn-toggle.on {
+  background: #0A84FF;
+}
+.tn-toggle.on text {
+  color: #FFFFFF;
+}
+
 /* 方位大读数 */
 .heading-readout {
   display: flex;
