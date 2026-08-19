@@ -1,10 +1,13 @@
 // components/protractor-dial/protractor-dial.js
-// iOS 指南针罗盘 — 精确复刻（60fps 流畅版）
+// iOS 指南针罗盘 — 渲染层 rAF 插值绘制（高性能版）
 //
-// 渲染优化：
-//  - 刻度环 + 外圈白环：预先渲染到离屏 sprite，每帧仅一次 drawImage 旋转绘制（避免 180 次 stroke）
-//  - requestAnimationFrame 合并重绘：传感器高频回调只标记脏帧，每帧只画一次
-//  - DPR 上限 2，降低像素填充开销
+// 性能要点：
+//  - 插值 + 绘制全部在「组件渲染层的 canvas.requestAnimationFrame」中完成，
+//    逻辑层不再按帧 setData，避免跨线程通信被放大（原先 65Hz×9字段 + 二次 rAF）。
+//  - 逻辑层只把「目标 heading/beta/gamma」低频 setData 给组件 property，
+//    observer 仅更新 this._target，不触发绘制。
+//  - 静止（cur≈target）时自动停止 rAF，省电；observer 更新 target 时再重启。
+//  - 刻度环预渲染到离屏 sprite，每帧仅一次 drawImage 旋转绘制。
 //
 // 旋转层（随 heading 反向旋转）：
 //  - 外圈细白环 + 刻度线（每 2°/10°/30°）
@@ -14,12 +17,17 @@
 //  - 顶部白色竖线 + 红色三角（尖角朝外）
 //  - 白色粗指针线段（灰盘向上延伸）
 //  - 中央深灰圆盘 + 浮动小十字准星（beta/gamma 驱动）
+
+const EASE = 0.35;   // 插值系数（sensor 低频 → 60fps 平滑）
+const EPS = 0.02;    // 静止判定阈值
+
 Component({
   properties: {
-    heading: { type: Number, value: 0, observer() { this._requestDraw(); } },
-    stableHeading: { type: Number, value: 0, observer() { this._requestDraw(); } },
-    beta: { type: Number, value: 0, observer() { this._requestDraw(); } },
-    gamma: { type: Number, value: 0, observer() { this._requestDraw(); } },
+    // heading/beta/gamma 作为「目标值」：observer 仅更新内部 _target，不绘制
+    heading: { type: Number, value: 0, observer(v) { this._target.heading = v || 0; this.startLoop(); } },
+    stableHeading: { type: Number, value: 0 },
+    beta: { type: Number, value: 0, observer(v) { this._target.beta = v || 0; this.startLoop(); } },
+    gamma: { type: Number, value: 0, observer(v) { this._target.gamma = v || 0; this.startLoop(); } },
   },
 
   data: {},
@@ -27,18 +35,22 @@ Component({
   lifetimes: {
     attached() {
       this._inited = false;
-      this._dirty = false;
+      this._rafOn = false;
       this._raf = 0;
       this._sprite = null;
       this.refAngle = null;   // 单击罗盘设置的基准刻度（盘面坐标角度）
+      this._target = { heading: 0, beta: 0, gamma: 0 };
+      this._cur = { heading: 0, beta: 0, gamma: 0 };
       this._initCanvas();
     },
     ready() {
       this._initCanvas();
     },
     detached() {
-      if (this._raf && this.canvas && this.canvas.cancelAnimationFrame) {
-        this.canvas.cancelAnimationFrame(this._raf);
+      this._rafOn = false;
+      if (this._raf && this.canvas) {
+        if (this.canvas.cancelAnimationFrame) this.canvas.cancelAnimationFrame(this._raf);
+        else clearTimeout(this._raf);
       }
       if (this._tapTimer) { clearTimeout(this._tapTimer); this._tapTimer = 0; }
       this.canvas = null;
@@ -76,7 +88,7 @@ Component({
           this.refAngle = Math.round(stable * 10) / 10;   // 指针当前指向的刻度设为基准
         }
         this.triggerEvent('refchange', { refAngle: this.refAngle });
-        this._requestDraw();
+        this._draw(this._cur.heading, this._cur.beta, this._cur.gamma);
       }, 250);
     },
 
@@ -115,7 +127,9 @@ Component({
 
           // 预渲染刻度环 sprite
           this._initSprite();
-          this._redraw();
+          // 初始绘制一次 + 启动渲染层插值循环
+          this._draw(this._cur.heading, this._cur.beta, this._cur.gamma);
+          this.startLoop();
         });
     },
 
@@ -162,31 +176,42 @@ Component({
       }
     },
 
-    // 传感器高频回调 → 标记脏帧，由 rAF 合并到每帧一次绘制
-    _requestDraw() {
-      if (!this._inited || !this.ctx) return;
-      this._dirty = true;
-      if (this._raf) return;
-      const canvas = this.canvas;
-      if (canvas && canvas.requestAnimationFrame) {
-        this._raf = canvas.requestAnimationFrame(() => {
-          this._raf = 0;
-          if (!this._dirty) return;
-          this._dirty = false;
-          const { heading, beta, gamma } = this.properties;
-          this._draw(heading || 0, beta || 0, gamma || 0);
-        });
-      } else {
-        this._dirty = false;
-        const { heading, beta, gamma } = this.properties;
-        this._draw(heading || 0, beta || 0, gamma || 0);
-      }
-    },
+    // 渲染层 rAF：逻辑层只更新 _target，这里做 60fps 插值并绘制。
+    // 静止（cur≈target）时自动停止，observer 更新 target 时再重启。
+    startLoop() {
+      if (this._rafOn || !this._inited || !this.canvas) return;
+      this._rafOn = true;
+      const raf = this.canvas.requestAnimationFrame
+        ? this.canvas.requestAnimationFrame.bind(this.canvas)
+        : (cb) => setTimeout(() => cb(Date.now()), 16);
+      const step = () => {
+        if (!this._rafOn || !this.canvas) { this._rafOn = false; return; }
+        const t = this._target, c = this._cur;
 
-    _redraw() {
-      if (!this._inited || !this.ctx) return;
-      const { heading, beta, gamma } = this.properties;
-      this._draw(heading || 0, beta || 0, gamma || 0);
+        // heading 沿最短路径插值（处理 359°→0° 跳变）
+        let dh = t.heading - c.heading;
+        if (dh > 180) dh -= 360;
+        if (dh < -180) dh += 360;
+        c.heading = (c.heading + dh * EASE + 360) % 360;
+        c.beta += (t.beta - c.beta) * EASE;
+        c.gamma += (t.gamma - c.gamma) * EASE;
+
+        const done =
+          Math.abs(dh) < EPS &&
+          Math.abs(t.beta - c.beta) < EPS &&
+          Math.abs(t.gamma - c.gamma) < EPS;
+        if (done) {
+          c.heading = t.heading;
+          c.beta = t.beta;
+          c.gamma = t.gamma;
+        }
+
+        this._draw(c.heading, c.beta, c.gamma);
+
+        if (done) { this._rafOn = false; return; }  // 静止停 rAF，省电
+        this._raf = raf(step);
+      };
+      this._raf = raf(step);
     },
 
     _draw(heading, beta, gamma) {
@@ -194,7 +219,7 @@ Component({
       const W = this.W, H = this.H;
       const cx = W / 2, cy = H / 2;
       const outerR = this.outerR;
-      if (!outerR || outerR <= 0) return;
+      if (!ctx || !outerR || outerR <= 0) return;
 
       const innerR = outerR * 0.36;       // 中央灰盘半径
       const ringR = outerR * 0.72;        // 方位字环带半径（基本紧贴刻度内侧）

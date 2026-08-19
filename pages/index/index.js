@@ -1,10 +1,6 @@
 // pages/index/index.js — iOS 风格指南针
 const { CompassEngine } = require('../../utils/compass.js');
 
-// 每帧追赶系数：传感器低频(约5Hz) → rAF 插值平滑到 60fps
-const EASE = 0.35;
-const EPS = 0.02;
-
 Page({
   data: {
     currentPage: 0,
@@ -29,12 +25,11 @@ Page({
 
   onLoad() {
     this._destroyed = false;
-    this._rafOn = false;
-    this._raf = 0;
-    this._prevLevel = false;
     this._refAngle = null;   // 基准刻度（盘面坐标角度），来自罗盘组件
-    this._cur = { heading: 0, beta: 0, gamma: 0 };
-    this._target = { heading: 0, beta: 0, gamma: 0, cardinalName: '北', isLevel: false };
+    this._prevLevel = false;
+    this._lastRawH = null;   // 上一帧喂给组件的原始 heading（变化才 setData，避免每帧跨线程）
+    this._lastRawB = null;
+    this._lastRawG = null;
 
     // 恢复历史记录（兼容旧版无 baseStr/deltaStr 的数据）
     const saved = wx.getStorageSync('compass_history');
@@ -63,22 +58,8 @@ Page({
       useGeoDeclination: savedGeo,
       onUpdate: (s) => {
         if (this._destroyed) return;
-        // 只更新目标值，由 rAF 循环插值渲染
-        this._target.heading = s.heading;
-        this._target.beta = s.beta;
-        this._target.gamma = s.gamma;
-        this._target.cardinalName = s.cardinalName;
-        this._target.isLevel = s.isLevel;
         this._isStill = !!s.isStill;   // 静止判定（测量用）
-        this.setData({ stableHeading: s.stableHeading });
-        if (this.data.calibrating !== !!s.calibrating) {
-          this.setData({ calibrating: !!s.calibrating });
-        }
-        if (this.data.geoSource !== s.geoSource) {
-          const _srcTxt = { live: '实时定位', cached: '缓存位置', default: '默认(北京)' }[s.geoSource] || '';
-          this.setData({ geoSource: s.geoSource, geoSourceText: _srcTxt });
-        }
-        this._startLoop();
+        this._onEngineUpdate(s);
       },
     });
     this.setData({ isTrueNorth: savedTN, isGeoDeclination: savedGeo });
@@ -89,14 +70,73 @@ Page({
   },
 
   onHide() {
-    this._stopLoop();
     this.engine && this.engine.stop();
   },
 
   onUnload() {
     this._destroyed = true;
-    this._stopLoop();
     this.engine && this.engine.stop();
+  },
+
+  // 引擎高频回调（罗盘~5Hz + 陀螺仪~60Hz）。
+  // 关键优化：原始 heading/beta/gamma 仅在「值变化」时 setData 给罗盘组件（组件内部 60fps 渲染层
+  // 插值绘制，不再由逻辑层每帧 setData）；派生文本同样仅在值变化时 setData，彻底消除按帧跨线程通信。
+  _onEngineUpdate(s) {
+    const patch = {};
+
+    // 原始值：变化才传给组件（驱动其渲染层插值），避免每帧跨线程通信
+    if (this._lastRawH !== s.heading || this._lastRawB !== s.beta || this._lastRawG !== s.gamma) {
+      patch.heading = s.heading;
+      patch.beta = s.beta;
+      patch.gamma = s.gamma;
+      patch.stableHeading = s.stableHeading;
+      this._lastRawH = s.heading;
+      this._lastRawB = s.beta;
+      this._lastRawG = s.gamma;
+    }
+
+    // 派生文本：仅在值变化时更新
+    const disp = s.displayHeading;
+    if (this.data.displayHeading !== disp) patch.displayHeading = disp;
+    if (this.data.cardinalName !== s.cardinalName) patch.cardinalName = s.cardinalName;
+
+    const isFlat = Math.abs(s.beta) < 50;
+    const tilt = isFlat
+      ? Math.sqrt(s.beta * s.beta + s.gamma * s.gamma)
+      : Math.abs(s.gamma);
+    const tiltStr = tilt < 0.5 ? '0' : tilt.toFixed(1);
+    if (this.data.tiltDegrees !== tiltStr) patch.tiltDegrees = tiltStr;
+
+    if (this.data.isLevel !== s.isLevel) patch.isLevel = s.isLevel;
+
+    // 相对读数（0.1° 精度）
+    const rel = this._computeRelative(s.heading);
+    let relStr = '';
+    if (rel !== null) {
+      const v = Math.round(rel * 10) / 10;
+      relStr = (v >= 0 ? '+' : '') + v.toFixed(1) + '°';
+    }
+    if (this.data.relativeStr !== relStr) {
+      patch.relativeStr = relStr;
+      patch.relativeHeading = rel;
+    }
+
+    if (this.data.calibrating !== !!s.calibrating) {
+      patch.calibrating = !!s.calibrating;
+    }
+    if (this.data.geoSource !== s.geoSource) {
+      const _srcTxt = { live: '实时定位', cached: '缓存位置', default: '默认(北京)' }[s.geoSource] || '';
+      patch.geoSource = s.geoSource;
+      patch.geoSourceText = _srcTxt;
+    }
+
+    if (Object.keys(patch).length) this.setData(patch);
+
+    // 水平仪十字与指针十字线重合（达到水平）时触发一次震动反馈
+    if (s.isLevel && !this._prevLevel) {
+      wx.vibrateShort({ type: 'medium' });
+    }
+    this._prevLevel = !!s.isLevel;
   },
 
   _startEngine() {
@@ -113,90 +153,6 @@ Page({
       }
       wx.showModal({ title, content: tip, showCancel: false });
     });
-  },
-
-  // —— rAF 插值循环：低频传感器数据 → 60fps 流畅渲染 ——
-  _startLoop() {
-    if (this._rafOn || this._destroyed) return;
-    this._rafOn = true;
-    const step = () => {
-      if (this._destroyed || !this._rafOn) { this._rafOn = false; return; }
-      const t = this._target, c = this._cur;
-
-      // heading 沿最短路径插值（处理 359°→0° 跳变）
-      let dh = t.heading - c.heading;
-      if (dh > 180) dh -= 360;
-      if (dh < -180) dh += 360;
-      c.heading = (c.heading + dh * EASE + 360) % 360;
-      c.beta += (t.beta - c.beta) * EASE;
-      c.gamma += (t.gamma - c.gamma) * EASE;
-
-      const done =
-        Math.abs(dh) < EPS &&
-        Math.abs(t.beta - c.beta) < EPS &&
-        Math.abs(t.gamma - c.gamma) < EPS;
-      if (done) {
-        c.heading = t.heading;
-        c.beta = t.beta;
-        c.gamma = t.gamma;
-      }
-
-      const isFlat = Math.abs(c.beta) < 50;
-      const tilt = isFlat
-        ? Math.sqrt(c.beta * c.beta + c.gamma * c.gamma)
-        : Math.abs(c.gamma);
-      const tiltStr = tilt < 0.5 ? '0' : tilt.toFixed(1);
-
-      // 水平仪十字与指针十字线重合（达到水平）时触发一次震动反馈
-      const isLevelNow = Math.sqrt(c.beta * c.beta + c.gamma * c.gamma) < 0.5;
-      if (isLevelNow && !this._prevLevel) {
-        wx.vibrateShort({ type: 'medium' });
-      }
-      this._prevLevel = isLevelNow;
-
-      // 相对读数（0.1° 精度）
-      const rel = this._computeRelative(c.heading);
-      let relStr = '';
-      if (rel !== null) {
-        const v = Math.round(rel * 10) / 10;
-        relStr = (v >= 0 ? '+' : '') + v.toFixed(1) + '°';
-      }
-
-      this.setData({
-        heading: c.heading,
-        displayHeading: Math.round(c.heading),
-        beta: c.beta,
-        gamma: c.gamma,
-        cardinalName: t.cardinalName,
-        isLevel: t.isLevel,
-        tiltDegrees: tiltStr,
-        relativeHeading: rel,
-        relativeStr: relStr,
-      });
-
-      if (done) { this._rafOn = false; return; }
-      this._raf = this._nextFrame(step);
-    };
-    this._raf = this._nextFrame(step);
-  },
-
-  _nextFrame(cb) {
-    if (typeof requestAnimationFrame === 'function') {
-      return requestAnimationFrame(cb);
-    }
-    return setTimeout(cb, 16);
-  },
-
-  _stopLoop() {
-    this._rafOn = false;
-    if (this._raf) {
-      if (typeof cancelAnimationFrame === 'function') {
-        cancelAnimationFrame(this._raf);
-      } else {
-        clearTimeout(this._raf);
-      }
-      this._raf = 0;
-    }
   },
 
   onSwiperChange(e) {
