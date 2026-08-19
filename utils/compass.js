@@ -24,8 +24,10 @@ const CARDINALS = ['北', '东北', '东', '东南', '南', '西南', '西', '�
 
 // 陀螺仪(alpha差分)跟随系数：0.9 短时接近原始角速度，1.0 完全跟随
 const GYRO_WEIGHT = 0.9;
-// 磁力计慢校正系数：约 5Hz 采样下 0.02 提供数十秒量级的漂移校正
-const MAG_WEIGHT = 0.02;
+// 磁力计校正系数：约 5Hz 采样下 0.12 在数百毫秒量级内把漂移拉回，同时抑制磁力计噪声
+const MAG_WEIGHT = 0.12;
+// 自适应方向校准的最小变化阈值（°）：低于该值视为噪声，不更新符号，避免误翻转
+const CALIB_MIN_DELTA = 3;
 // 静止判定：角速度低于该值视为静止（°/s）
 const STILL_RATE = 0.8;
 // 连续多少帧（game 约 60Hz）静止才算稳定
@@ -93,12 +95,12 @@ class CompassEngine {
     if (!res || typeof res.direction !== 'number') return;
     this.compassReady = true;
 
-    // 自适应校准 alpha 方向：比较罗盘变化方向与 alpha 变化方向
+    // 自适应校准 alpha 方向：比较罗盘变化方向与 alpha 变化方向（仅在大幅变化时更新）
     const prevRaw = this.rawHeading;
     const compassDelta = normalizeAngle(res.direction - prevRaw);
     if (this.lastAlpha !== null && this._alphaAtPrevCompass !== null) {
       const alphaDelta = normalizeAngle(this.lastAlpha - this._alphaAtPrevCompass);
-      if (Math.abs(compassDelta) > 1 && Math.abs(alphaDelta) > 1) {
+      if (Math.abs(compassDelta) > CALIB_MIN_DELTA && Math.abs(alphaDelta) > CALIB_MIN_DELTA) {
         this._alphaSign = compassDelta * alphaDelta < 0 ? -1 : 1;
       }
     }
@@ -106,7 +108,7 @@ class CompassEngine {
 
     this.rawHeading = res.direction;
 
-    // 静止时采集样本，供圆形平均降噪（仅静止期间积累）
+    // 静止：采集样本；运动：清空样本
     if (this.isStill) {
       this.stillBuffer.push(res.direction);
       if (this.stillBuffer.length > STILL_SAMPLE_N) this.stillBuffer.shift();
@@ -118,13 +120,15 @@ class CompassEngine {
       // 首次罗盘读数：初始化融合值
       this._hasCompass = true;
       this.fused = this.rawHeading;
-      this.heading = this.fused;
+    } else if (this.isStill && this.stillBuffer.length >= 2) {
+      // 静止：锁定到磁力计圆形平均，消除陀螺仪漂移（显示精确）
+      this.fused = this._circularMean(this.stillBuffer);
     } else {
-      // 磁力计慢速校正陀螺仪漂移（小步长，不引入可见跳变）
+      // 运动：磁力计快速校正陀螺仪漂移
       const diff = normalizeAngle(this.rawHeading - this.fused);
       this.fused = ((this.fused + diff * MAG_WEIGHT) % 360 + 360) % 360;
-      this.heading = this.fused;
     }
+    this.heading = this.fused;
     this._tick();
     this._emit();
   }
@@ -148,9 +152,12 @@ class CompassEngine {
         // 静止判定
         this.stillFrames = rate < STILL_RATE ? this.stillFrames + 1 : 0;
         this.isStill = this.stillFrames >= STILL_FRAMES;
-        // 互补滤波：陀螺仪短时积分（快、低滞后），方向由罗盘自适应校准
-        this.fused = ((this.fused + dA * this._alphaSign * GYRO_WEIGHT) % 360 + 360) % 360;
-        this.heading = this.fused;
+        // 静止时不做陀螺仪积分（fused 由磁力计圆形平均锁定，保证方向精确）
+        if (!this.isStill) {
+          // 互补滤波：陀螺仪短时积分（快、低滞后），方向由罗盘自适应校准
+          this.fused = ((this.fused + dA * this._alphaSign * GYRO_WEIGHT) % 360 + 360) % 360;
+          this.heading = this.fused;
+        }
       }
     }
     this.lastAlpha = alpha;
