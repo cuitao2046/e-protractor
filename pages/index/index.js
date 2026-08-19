@@ -21,6 +21,7 @@ Page({
     showHistory: false,      // 历史记录面板
     historyList: [],         // 测量历史：[{id, timeStr, base, baseStr, delta, deltaStr}]
     isTrueNorth: false,      // 真北校正开关（默认磁北）
+    isGeoDeclination: false, // 是否按当前位置动态计算磁偏角（默认关，回退北京）
   },
 
   onLoad() {
@@ -50,11 +51,13 @@ Page({
       this.setData({ historyList: cleaned });
     }
 
-    // 真北校正偏好（本地持久化，不申请位置权限；北京 2026 约西偏 8°）
+    // 真北校正偏好（本地持久化）
     const savedTN = !!wx.getStorageSync('use_true_north');
+    // 按位置算磁偏角偏好（本地持久化；开启后 wx.getLocation 动态算 WMM 磁偏角）
+    const savedGeo = !!wx.getStorageSync('use_geo_declination');
     this.engine = new CompassEngine({
       useTrueNorth: savedTN,
-      declination: 8,
+      useGeoDeclination: savedGeo,
       onUpdate: (s) => {
         if (this._destroyed) return;
         // 只更新目标值，由 rAF 循环插值渲染
@@ -68,7 +71,7 @@ Page({
         this._startLoop();
       },
     });
-    this.setData({ isTrueNorth: savedTN });
+    this.setData({ isTrueNorth: savedTN, isGeoDeclination: savedGeo });
   },
 
   onShow() {
@@ -231,13 +234,25 @@ Page({
     wx.setStorageSync('compass_history', list);
   },
 
-  // 切换真北/磁北显示（默认磁北；微信 iOS 已返回真北，故真北直通、磁北 +磁偏角，与 iOS 对齐）
+  // 切换真北/磁北显示（默认磁北；微信 iOS 已返回真北，故真北直通、磁北 = 真北 − 磁偏角(WMM 东正)）
   toggleTrueNorth() {
     const nv = !this.data.isTrueNorth;
     if (this.engine) this.engine.setTrueNorth(nv);
     this.setData({ isTrueNorth: nv });
     wx.setStorageSync('use_true_north', nv);
     wx.showToast({ title: nv ? '已切换到真北' : '已切换到磁北', icon: 'none' });
+  },
+
+  // 切换是否按当前位置动态计算磁偏角（开启后请求定位权限并实时算 WMM 磁偏角）
+  toggleGeoDeclination() {
+    const nv = !this.data.isGeoDeclination;
+    if (this.engine) this.engine.setGeoDeclination(nv);
+    this.setData({ isGeoDeclination: nv });
+    wx.setStorageSync('use_geo_declination', nv);
+    wx.showToast({
+      title: nv ? '已开启：按位置算磁偏角' : '已关闭：使用默认磁偏角',
+      icon: 'none',
+    });
   },
 
   openHistory() {

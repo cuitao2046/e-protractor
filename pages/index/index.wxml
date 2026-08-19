@@ -15,6 +15,11 @@
           <text>{{isTrueNorth ? '真北' : '磁北'}}</text>
         </view>
 
+        <!-- 按位置算磁偏角（WMM 实时计算） -->
+        <view class="geo-toggle {{isGeoDeclination ? 'on' : ''}}" bindtap="toggleGeoDeclination">
+          <text>{{isGeoDeclination ? '位置磁偏角·开' : '位置磁偏角·关'}}</text>
+        </view>
+
         <!-- 罗盘 -->
         <view class="dial-area">
           <compass-dial

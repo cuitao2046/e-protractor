@@ -64,6 +64,33 @@
   color: #FFFFFF;
 }
 
+/* 按位置算磁偏角开关（罗盘页顶部居中，真北药丸下方） */
+.geo-toggle {
+  position: absolute;
+  top: calc(76rpx + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  padding: 10rpx 30rpx;
+  border-radius: 999rpx;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.geo-toggle text {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 2rpx;
+}
+.geo-toggle.on {
+  background: #30D158;
+}
+.geo-toggle.on text {
+  color: #FFFFFF;
+}
+
 /* 方位大读数 */
 .heading-readout {
   display: flex;

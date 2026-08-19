@@ -12,6 +12,9 @@
   },
   "sitemapLocation": "sitemap.json",
   "__usePrivacyCheck__": true,
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
   "permission": {
     "scope.userLocation": {
       "desc": "用于获取您当前的方位信息"

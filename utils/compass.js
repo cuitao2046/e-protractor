@@ -10,12 +10,17 @@
  * - 静止判定：连续多帧角速度低于阈值判定为静止（测量精度关键）
  * - 真北/磁北切换：实测表明 iOS 上 wx.onCompassChange 返回的 direction 已是「真北」
  *   （raw 与苹果真北一致：小程序 raw 330 == 苹果真北 330；苹果磁北 338 = raw + 8）。
- *   因此：真北 = 原值（直通）；磁北 = 原值 + declination（西偏为正；北京 2026 约 8°）。
+ *   因此：真北 = 原值（直通）；磁北 = 原值 − declination。
+ *   declination 取 WMM2025 模型按经纬度实时计算（东偏为正；北京约 −7.5°，
+ *   即磁北在真北西侧，故磁北 = 真北 + 7.5°）。开启 useGeoDeclination 时用
+ *   wx.getLocation 获取当前位置动态算；否则回退北京固定值。
  * - 每 30° 触觉反馈（北向更强）
  *
  * 说明：alpha（陀螺仪）与罗盘方向在部分机型上相反，本实现用罗盘变化方向
  *       自适应校准 alpha 方向（_alphaSign），无需手动配置。
  */
+
+const Geomag = require('./geomag.js');
 
 function normalizeAngle(delta) {
   let x = ((delta % 360) + 360) % 360;
@@ -41,10 +46,17 @@ const STILL_SAMPLE_N = 5;
 class CompassEngine {
   constructor(opts = {}) {
     this.onUpdate = opts.onUpdate || function () {};
-    // 真北/磁北开关（默认关，显示磁北）；declination 为本地磁偏角（西偏为正，单位°）
-    // 微信在 iOS 上返回真北：开启 useTrueNorth 时直通、关闭时 +declination 得磁北
+    // 真北/磁北开关（默认关，显示磁北）。微信在 iOS 上返回真北：开启 useTrueNorth 时直通、
+    // 关闭时按 declination 换算磁北（磁北 = 真北 − declination，declination 东偏为正）。
     this.useTrueNorth = !!opts.useTrueNorth;
-    this.declination = (typeof opts.declination === 'number') ? opts.declination : 8;
+    // 是否按当前位置动态计算磁偏角（wx.getLocation）；关闭时回退北京固定值
+    this.useGeoDeclination = !!opts.useGeoDeclination;
+    this._hasGeoDeclination = false;
+    // declination：WMM 磁偏角（东偏为正，单位°）。默认用北京 WMM2025 值，开启定位后覆盖。
+    // 注意：index.js 不应再硬编码 declination（旧 +8 是"加值"，与新东正约定相反）。
+    this.declination = (typeof opts.declination === 'number')
+      ? opts.declination
+      : Geomag.declination(39.9042, 116.4074, this._decimalYear());
 
     this.heading = 0;        // 平滑显示值（即微信方向的真北值；UI 输出层按开关做真/磁切换）
     this.fused = 0;          // 互补滤波融合值（heading 的数据源）
@@ -64,6 +76,44 @@ class CompassEngine {
     this._alphaAtPrevCompass = null;
     // 静止样本缓冲：静止时持续采集罗盘原始值，供圆形平均输出高精度读数
     this.stillBuffer = [];
+  }
+
+  // 当前十进制年份（WMM 按年做线性年变率外推）
+  _decimalYear() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const dayOfYear = (now - start) / 86400000;
+    const len = (now.getFullYear() % 4 === 0) ? 366 : 365;
+    return now.getFullYear() + dayOfYear / len;
+  }
+
+  // 按当前位置用 WMM2025 计算磁偏角，覆盖 this.declination
+  updateDeclinationFromLocation() {
+    if (typeof wx === 'undefined') return;
+    const self = this;
+    wx.getLocation({
+      type: 'wgs84',
+      altitude: false,
+      success: (res) => {
+        const d = Geomag.declination(res.latitude, res.longitude, self._decimalYear());
+        if (typeof d === 'number' && !isNaN(d)) {
+          self.declination = d;
+          self._hasGeoDeclination = true;
+          self._emit();
+        }
+      },
+      fail: () => { /* 获取失败：保留默认/上次值，不阻断指南针 */ },
+    });
+  }
+
+  // 切换是否按位置算磁偏角；开启时立即拉取位置并重算
+  setGeoDeclination(v) {
+    this.useGeoDeclination = !!v;
+    if (this.useGeoDeclination && this.running) {
+      this.updateDeclinationFromLocation();
+    } else {
+      this._emit();
+    }
   }
 
   // 切换真北/磁北，立即刷新一次读数（无需等下一次传感器回调）
@@ -90,6 +140,7 @@ class CompassEngine {
           wx.onDeviceMotionChange(this._onMotion.bind(this));
           startCompass();
           this.running = true;
+          if (this.useGeoDeclination) this.updateDeclinationFromLocation();
           resolve(true);
         },
         fail: (err) => { reject(err); },
@@ -230,10 +281,10 @@ class CompassEngine {
 
   _tick() {
     if (!this.inited) return;
-    // 每 30° 一个触觉反馈，北（0°）反馈更强；按「显示值」判定（真北直通 / 磁北 +declination）
+    // 每 30° 一个触觉反馈，北（0°）反馈更强；按「显示值」判定（真北直通 / 磁北 −declination）
     const raw = this.useTrueNorth
       ? this.heading
-      : ((this.heading + this.declination) % 360 + 360) % 360;
+      : ((this.heading - this.declination) % 360 + 360) % 360;
     const bucket = Math.floor((((raw % 360) + 360) % 360) / 30);
     if (bucket !== this.lastTickBucket) {
       this.lastTickBucket = bucket;
@@ -242,10 +293,10 @@ class CompassEngine {
   }
 
   _emit() {
-    // 真北/磁北切换：微信在 iOS 上返回真北，故真北=直通、磁北=原值+declination
-    // （declination 西偏为正；北京约 8°，苹果磁北 = 真北 + 8）
+    // 真北/磁北切换：微信在 iOS 上返回真北，故真北=直通、磁北=原值−declination
+    // （declination 为 WMM 磁偏角，东偏为正；北京约 −7.5°，即磁北=真北+7.5°）
     const t = this.useTrueNorth ? 0 : this.declination;
-    const correct = (v) => (((v + t) % 360) + 360) % 360;
+    const correct = (v) => (((v - t) % 360) + 360) % 360;
     const h = correct(this.heading);
     const idx = Math.round(h / 45) % 8;
     const isLevel = Math.abs(this.beta) < 2 && Math.abs(this.gamma) < 2;
