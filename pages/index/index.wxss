@@ -42,7 +42,7 @@
 .bottom-left {
   position: absolute;
   left: 32rpx;
-  bottom: calc(90rpx + env(safe-area-inset-bottom));
+  bottom: calc(78rpx + env(safe-area-inset-bottom));
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -61,6 +61,7 @@
 }
 .tn-toggle text {
   font-size: 26rpx;
+  line-height: 26rpx;
   font-weight: 500;
   color: rgba(255,255,255,0.6);
   letter-spacing: 2rpx;
@@ -83,6 +84,7 @@
 }
 .geo-toggle text {
   font-size: 26rpx;
+  line-height: 26rpx;
   font-weight: 500;
   color: rgba(255,255,255,0.6);
   letter-spacing: 2rpx;
