@@ -88,6 +88,24 @@ class CompassEngine {
     try { wx.stopCompass(); } catch (e) {}
     try { wx.stopDeviceMotionListening(); } catch (e) {}
     this.running = false;
+    // 重置融合/静止/自适应状态：避免切后台再切回时复用陈旧数据
+    // （stillBuffer、fused、_hasCompass 等），否则首个罗盘读数会被旧缓冲
+    // 拖拽、缓慢漂移，出现 0°→357° 这类跳变。切回 start 时因 _hasCompass
+    // 复位为 false，首个罗盘读数会干净地重新初始化 fused。
+    this.fused = 0;
+    this.heading = 0;
+    this.rawHeading = 0;
+    this.isStill = false;
+    this.stillFrames = 0;
+    this.stillBuffer = [];
+    this._hasCompass = false;   // 关键：让首个罗盘读数重新初始化 fused
+    this.lastAlpha = null;
+    this.lastAlphaTime = 0;
+    this._alphaAtPrevCompass = null;
+    this._alphaSign = 1;
+    this.inited = false;
+    this.lastTickBucket = -1;
+    // 注：compassReady 保留为 true，避免罗盘就绪前误走 alpha 退回分支污染读数
   }
 
   // —— 磁力计（约5Hz）：绝对方向 + 慢速漂移校正 ——
