@@ -20,6 +20,11 @@
           <text>{{isGeoDeclination ? '位置磁偏角·开' : '位置磁偏角·关'}}</text>
         </view>
 
+        <!-- 磁偏角来源提示：仅在开启位置磁偏角时显示 -->
+        <view class="geo-source geo-{{geoSource}}" wx:if="{{isGeoDeclination && geoSourceText}}">
+          <text>{{geoSourceText}}</text>
+        </view>
+
         <!-- 罗盘 -->
         <view class="dial-area">
           <compass-dial

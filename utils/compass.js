@@ -52,11 +52,19 @@ class CompassEngine {
     // 是否按当前位置动态计算磁偏角（wx.getLocation）；关闭时回退北京固定值
     this.useGeoDeclination = !!opts.useGeoDeclination;
     this._hasGeoDeclination = false;
-    // declination：WMM 磁偏角（东偏为正，单位°）。默认用北京 WMM2025 值，开启定位后覆盖。
-    // 注意：index.js 不应再硬编码 declination（旧 +8 是"加值"，与新东正约定相反）。
-    this.declination = (typeof opts.declination === 'number')
-      ? opts.declination
-      : Geomag.declination(39.9042, 116.4074, this._decimalYear());
+    // declination：WMM 磁偏角（东偏为正，单位°）。
+    // 优先用上次成功定位的缓存位置；其次回退北京 WMM2025 值。
+    // 索引页不硬编码（旧 +8 与东正约定相反）。
+    this._geoSource = 'default';   // 'live' | 'cached' | 'default'
+    const _cachedLoc = this._loadCachedLocation();
+    if (typeof opts.declination === 'number') {
+      this.declination = opts.declination;
+    } else if (_cachedLoc) {
+      this.declination = Geomag.declination(_cachedLoc.lat, _cachedLoc.lon, this._decimalYear());
+      this._geoSource = 'cached';
+    } else {
+      this.declination = Geomag.declination(39.9042, 116.4074, this._decimalYear());
+    }
 
     this.heading = 0;        // 平滑显示值（即微信方向的真北值；UI 输出层按开关做真/磁切换）
     this.fused = 0;          // 互补滤波融合值（heading 的数据源）
@@ -87,6 +95,29 @@ class CompassEngine {
     return now.getFullYear() + dayOfYear / len;
   }
 
+  // 位置缓存：室外成功定位后留存经纬度，室内无 GPS 时复用，避免回退北京默认偏角
+  _loadCachedLocation() {
+    if (typeof wx === 'undefined') return null;
+    try {
+      const raw = wx.getStorageSync('geo_declination_cache');
+      if (raw && typeof raw.lat === 'number' && typeof raw.lon === 'number') {
+        // 30 天 TTL：过期视为用户已跨城市，回退默认
+        if (typeof raw.savedAt === 'number' && Date.now() - raw.savedAt > 30 * 86400000) {
+          return null;
+        }
+        return raw;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  _cacheLocation(lat, lon) {
+    if (typeof wx === 'undefined') return;
+    try {
+      wx.setStorageSync('geo_declination_cache', { lat, lon, savedAt: Date.now() });
+    } catch (e) {}
+  }
+
   // 按当前位置用 WMM2025 计算磁偏角，覆盖 this.declination
   updateDeclinationFromLocation() {
     if (typeof wx === 'undefined') return;
@@ -99,10 +130,25 @@ class CompassEngine {
         if (typeof d === 'number' && !isNaN(d)) {
           self.declination = d;
           self._hasGeoDeclination = true;
+          self._geoSource = 'live';
+          self._cacheLocation(res.latitude, res.longitude);
           self._emit();
         }
       },
-      fail: () => { /* 获取失败：保留默认/上次值，不阻断指南针 */ },
+      fail: () => {
+        // 获取失败（如室内无 GPS）：复用上次成功定位的缓存位置
+        const cached = self._loadCachedLocation();
+        if (cached) {
+          const d = Geomag.declination(cached.lat, cached.lon, self._decimalYear());
+          if (typeof d === 'number' && !isNaN(d)) {
+            self.declination = d;
+            self._hasGeoDeclination = true;
+            self._geoSource = 'cached';
+            self._emit();
+          }
+        }
+        // 无缓存：保持默认（_geoSource='default'），不阻断指南针
+      },
     });
   }
 
@@ -311,6 +357,7 @@ class CompassEngine {
       cardinalName: CARDINALS[idx],
       isLevel,
       isStill: this.isStill,
+      geoSource: this._geoSource,   // 'live' | 'cached' | 'default'：磁偏角来源
     });
   }
 }
