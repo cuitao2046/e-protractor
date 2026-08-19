@@ -247,18 +247,26 @@ Page({
   // 切换真北/磁北显示（默认磁北；微信 iOS 已返回真北，故真北直通、磁北 = 真北 − 磁偏角(WMM 东正)）
   toggleTrueNorth() {
     const nv = !this.data.isTrueNorth;
-    if (this.engine) this.engine.setTrueNorth(nv);
+    // 先更新 UI 与持久化，保证开关一定切换；引擎调用放最后并 try/catch 防御
     this.setData({ isTrueNorth: nv });
     wx.setStorageSync('use_true_north', nv);
+    if (this.engine) {
+      try { this.engine.setTrueNorth(nv); } catch (e) {}
+    }
     wx.showToast({ title: nv ? '已切换到真北' : '已切换到磁北', icon: 'none' });
   },
 
   // 切换是否按当前位置动态计算磁偏角（开启后请求定位权限并实时算 WMM 磁偏角）
   toggleGeoDeclination() {
     const nv = !this.data.isGeoDeclination;
-    if (this.engine) this.engine.setGeoDeclination(nv);
+    // 先更新 UI 与持久化，保证开关状态一定切换；引擎调用放最后并用 try/catch 包裹：
+    // 真机上 wx.getLocation 在隐私/位置权限未授权时可能同步抛异常，若放在 setData
+    // 之前会阻断 UI 更新，导致药丸卡在「关」。
     this.setData({ isGeoDeclination: nv });
     wx.setStorageSync('use_geo_declination', nv);
+    if (this.engine) {
+      try { this.engine.setGeoDeclination(nv); } catch (e) { /* 隐私未授权等，不影响开关 UI */ }
+    }
     wx.showToast({
       title: nv ? '已开启：按位置算磁偏角' : '已关闭：使用默认磁偏角',
       icon: 'none',
