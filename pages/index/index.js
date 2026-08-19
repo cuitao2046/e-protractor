@@ -231,7 +231,7 @@ Page({
     wx.setStorageSync('compass_history', list);
   },
 
-  // 切换真北/磁北显示（默认磁北；开启后按本地磁偏角换算真北，与 iOS 真北对齐）
+  // 切换真北/磁北显示（默认磁北；微信 iOS 已返回真北，故真北直通、磁北 +磁偏角，与 iOS 对齐）
   toggleTrueNorth() {
     const nv = !this.data.isTrueNorth;
     if (this.engine) this.engine.setTrueNorth(nv);
