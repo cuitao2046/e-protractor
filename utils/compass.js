@@ -357,6 +357,7 @@ class CompassEngine {
       cardinalName: CARDINALS[idx],
       isLevel,
       isStill: this.isStill,
+      calibrating: !this._hasCompass,  // 罗盘首个 direction 未到达前为 true（首屏无效读数期间）
       geoSource: this._geoSource,   // 'live' | 'cached' | 'default'：磁偏角来源
     });
   }

@@ -39,8 +39,13 @@
 
         <!-- 方位大读数 -->
         <view class="heading-readout">
-          <text class="heading-value">{{displayHeading}}°</text>
-          <text class="heading-cardinal">{{cardinalName}}</text>
+          <block wx:if="{{calibrating}}">
+            <text class="heading-calibrating">校准中…</text>
+          </block>
+          <block wx:else>
+            <text class="heading-value">{{displayHeading}}°</text>
+            <text class="heading-cardinal">{{cardinalName}}</text>
+          </block>
         </view>
 
         <!-- 指针与基准的相对读数（锁定基准时显示） -->

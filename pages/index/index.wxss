@@ -136,6 +136,13 @@
   color: #FFFFFF;
   margin-left: 16rpx;
 }
+/* 罗盘校准中占位（首屏 / 切后台恢复瞬间，避免显示无效陀螺仪读数） */
+.heading-calibrating {
+  font-size: 64rpx;
+  font-weight: 300;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 4rpx;
+}
 
 /* 指针与基准的相对读数（锁定基准时显示，绝对定位不挤压布局） */
 .relative-readout {

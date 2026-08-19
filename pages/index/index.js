@@ -24,6 +24,7 @@ Page({
     isGeoDeclination: false, // 是否按当前位置动态计算磁偏角（默认关，回退北京）
     geoSource: 'default',    // 磁偏角来源：live=实时定位 / cached=缓存位置 / default=北京默认
     geoSourceText: '',       // 来源中文提示
+    calibrating: true,       // 罗盘未就绪时为 true，读数区显示「校准中」占位
   },
 
   onLoad() {
@@ -70,6 +71,9 @@ Page({
         this._target.isLevel = s.isLevel;
         this._isStill = !!s.isStill;   // 静止判定（测量用）
         this.setData({ stableHeading: s.stableHeading });
+        if (this.data.calibrating !== !!s.calibrating) {
+          this.setData({ calibrating: !!s.calibrating });
+        }
         if (this.data.geoSource !== s.geoSource) {
           const _srcTxt = { live: '实时定位', cached: '缓存位置', default: '默认(北京)' }[s.geoSource] || '';
           this.setData({ geoSource: s.geoSource, geoSourceText: _srcTxt });
