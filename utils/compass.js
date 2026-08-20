@@ -30,10 +30,10 @@ function normalizeAngle(delta) {
 
 const CARDINALS = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
 
-// 陀螺仪(alpha差分)跟随系数：0.9 短时接近原始角速度，1.0 完全跟随
+// 陀螺仪(alpha差分)跟随系数：0.9 短时接近原始角速度，1.0 完全跟随。
+// 注意：陀螺仪仅做帧间平滑插值，fused 的绝对基准在 _onCompass 每拍被罗盘真值重新锚定，
+// 因此陀螺仪零偏/慢漂不会在 fused 上累积（防止前台静止读数与切后台前后不一致）。
 const GYRO_WEIGHT = 0.9;
-// 磁力计校正系数：约 5Hz 采样下 0.12 在数百毫秒量级内把漂移拉回，同时抑制磁力计噪声
-const MAG_WEIGHT = 0.12;
 // 自适应方向校准的最小变化阈值（°）：低于该值视为噪声，不更新符号，避免误翻转
 const CALIB_MIN_DELTA = 3;
 // 静止判定：角速度低于该值视为静止（°/s）
@@ -253,9 +253,10 @@ class CompassEngine {
       // 静止：锁定到磁力计圆形平均，消除陀螺仪漂移（显示精确）
       this.fused = this._circularMean(this.stillBuffer);
     } else {
-      // 运动：磁力计快速校正陀螺仪漂移
-      const diff = normalizeAngle(this.rawHeading - this.fused);
-      this.fused = ((this.fused + diff * MAG_WEIGHT) % 360 + 360) % 360;
+      // 运动/过渡：磁力计为绝对基准，每一拍都把 fused 重新锚定回罗盘真值。
+      // 陀螺仪仅在 _onMotion 的帧间做平滑插值（低滞后），到下一拍即被本行覆盖，
+      // 因此陀螺仪零偏/慢漂无法在 fused 上累积——前台静止读数与切后台再切回一致。
+      this.fused = this.rawHeading;
     }
     this.heading = this.fused;
     this._tick();
