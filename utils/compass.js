@@ -5,7 +5,9 @@
  * 职责：
  * - 罗盘方向：wx.onCompassChange 获取 direction（0=北, 90=东, 180=南, 270=西，顺时针）
  * - 倾斜角度：wx.startDeviceMotionListening 获取 beta/gamma，供水平仪使用
- * - 互补滤波：陀螺仪(alpha 差分)提供短时高响应、低滞后；磁力计提供长时绝对校准、防漂移
+ * - 罗盘为绝对基准：fused 每拍由 wx.onCompassChange 的 direction 强锚定；陀螺仪仅做
+ *   「上一拍罗盘→当前」的帧间低滞后预测（每拍重置，不累积），不参与长期朝向积分，
+ *   从源头杜绝累积漂移，且静止/切后台瞬间 fused 始终等于罗盘真值（与系统指南针一致）。
  * - rawHeading：最近一次罗盘原始值（测量用，绕开滤波滞后）
  * - 静止判定：连续多帧角速度低于阈值判定为静止（测量精度关键）
  * - 真北/磁北切换：实测表明 iOS 上 wx.onCompassChange 返回的 direction 已是「真北」
@@ -30,9 +32,9 @@ function normalizeAngle(delta) {
 
 const CARDINALS = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
 
-// 陀螺仪(alpha差分)跟随系数：0.9 短时接近原始角速度，1.0 完全跟随。
-// 注意：陀螺仪仅做帧间平滑插值，fused 的绝对基准在 _onCompass 每拍被罗盘真值重新锚定，
-// 因此陀螺仪零偏/慢漂不会在 fused 上累积（防止前台静止读数与切后台前后不一致）。
+// 陀螺仪(alpha差分)帧间预测系数：0.9 短时接近原始角速度。
+// 注意：该积分不累积——每拍罗盘回调会重置 _gyroAccum 并重新锚定 fused 到罗盘真值，
+// 故陀螺仪仅做「上一拍罗盘值→当前」的低滞后插值，不产生长期漂移。
 const GYRO_WEIGHT = 0.9;
 // 自适应方向校准的最小变化阈值（°）：低于该值视为噪声，不更新符号，避免误翻转
 const CALIB_MIN_DELTA = 3;
@@ -79,6 +81,7 @@ class CompassEngine {
     this.lastAlpha = null;
     this.lastAlphaTime = 0;
     this.stillFrames = 0;
+    this._gyroAccum = 0;        // 陀螺仪自上一拍罗盘以来的累积预测角（每拍由 _onCompass 重置）
     // 自适应陀螺仪方向：真机上 alpha 与罗盘方向可能相反，用罗盘变化方向自动校准
     this._alphaSign = 1;
     this._alphaAtPrevCompass = null;
@@ -259,6 +262,7 @@ class CompassEngine {
       this.fused = this.rawHeading;
     }
     this.heading = this.fused;
+    this._gyroAccum = 0;        // 每拍重置陀螺仪帧间预测，杜绝累积漂移
     this._tick();
     this._emit();
   }
@@ -282,10 +286,19 @@ class CompassEngine {
         // 静止判定
         this.stillFrames = rate < STILL_RATE ? this.stillFrames + 1 : 0;
         this.isStill = this.stillFrames >= STILL_FRAMES;
-        // 静止时不做陀螺仪积分（fused 由磁力计圆形平均锁定，保证方向精确）
-        if (!this.isStill) {
-          // 互补滤波：陀螺仪短时积分（快、低滞后），方向由罗盘自适应校准
-          this.fused = ((this.fused + dA * this._alphaSign * GYRO_WEIGHT) % 360 + 360) % 360;
+        if (this.isStill) {
+          // 静止：fused 立即钉回罗盘真值，丢弃陀螺仪预测，保证精确且与系统一致
+          this._gyroAccum = 0;
+          this.fused = this.rawHeading;
+          this.heading = this.fused;
+        } else {
+          // 运动：陀螺仪在「上一拍罗盘真值」基础上做帧间预测插值（低滞后），
+          // 每拍由 _onCompass 重置 _gyroAccum 并重新锚定，故不会累积漂移；
+          // 即便切后台瞬间冻结，fused 也只是「罗盘真值 + 本拍预测」，与系统指南针一致。
+          this._gyroAccum += dA * GYRO_WEIGHT;
+          if (this._gyroAccum > 60) this._gyroAccum = 60;
+          if (this._gyroAccum < -60) this._gyroAccum = -60;
+          this.fused = (((this.rawHeading + this._alphaSign * this._gyroAccum) % 360) + 360) % 360;
           this.heading = this.fused;
         }
       }
